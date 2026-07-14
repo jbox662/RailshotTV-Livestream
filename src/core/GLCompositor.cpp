@@ -13,10 +13,15 @@
 #include <QOpenGLTexture>
 #include <QPainter>
 #include <QSurfaceFormat>
+#include <QVector2D>
+#include <QVector3D>
+#include <QVector4D>
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstring>
+#include <optional>
 #include <vector>
 
 namespace railshot {
@@ -44,17 +49,86 @@ uniform float uAlpha;
 uniform float uBrightness;
 uniform float uContrast;
 uniform float uSaturation;
+uniform vec4 uCrop;          // L T R B insets 0..1
+uniform vec2 uScroll;        // UV offset
+uniform float uScale;        // UV zoom
+uniform float uSharpness;    // 0..1
+uniform vec2 uTexelSize;
+uniform int uKeyMode;        // 0 none, 1 color, 2 chroma
+uniform vec3 uKeyColor;
+uniform float uKeySimilarity;
+uniform float uKeySmoothness;
+uniform float uKeySpill;
+uniform float uGradeAmount;
+uniform float uLift;
+uniform float uGamma;
+uniform float uGain;
+uniform int uScrollLoop;
+
+vec2 mapUv(vec2 uv) {
+    vec2 local = uv;
+    if (uScrollLoop == 1) {
+        local = fract(local + uScroll);
+    } else {
+        local = clamp(local + uScroll, 0.0, 1.0);
+    }
+    // Scale about center of remaining crop window.
+    vec2 minUv = vec2(uCrop.x, uCrop.y);
+    vec2 maxUv = vec2(1.0 - uCrop.z, 1.0 - uCrop.w);
+    vec2 center = 0.5 * (minUv + maxUv);
+    vec2 span = max(maxUv - minUv, vec2(0.001));
+    vec2 mapped = center + (local - 0.5) * span / max(uScale, 0.05);
+    return clamp(mapped, minUv, maxUv);
+}
+
+vec3 sampleRgb(vec2 uv) {
+    float y = texture(yTexture, uv).r;
+    vec2 chroma = texture(uvTexture, uv).rg - vec2(0.5, 0.5);
+    float r = y + 1.402 * chroma.y;
+    float g = y - 0.344 * chroma.x - 0.714 * chroma.y;
+    float b = y + 1.772 * chroma.x;
+    return vec3(r, g, b);
+}
+
 void main() {
-    float y = texture(yTexture, vTexCoord).r;
-    vec2 uv = texture(uvTexture, vTexCoord).rg - vec2(0.5, 0.5);
-    float r = y + 1.402 * uv.y;
-    float g = y - 0.344 * uv.x - 0.714 * uv.y;
-    float b = y + 1.772 * uv.x;
-    vec3 color = vec3(r, g, b);
+    vec2 uv = mapUv(vTexCoord);
+    vec3 color = sampleRgb(uv);
+
+    if (uSharpness > 0.001) {
+        vec3 blur = sampleRgb(uv + vec2(uTexelSize.x, 0.0))
+                  + sampleRgb(uv - vec2(uTexelSize.x, 0.0))
+                  + sampleRgb(uv + vec2(0.0, uTexelSize.y))
+                  + sampleRgb(uv - vec2(0.0, uTexelSize.y));
+        blur *= 0.25;
+        color = mix(color, color + (color - blur), uSharpness);
+    }
+
     color = (color - 0.5) * uContrast + 0.5 + uBrightness;
     float luma = dot(color, vec3(0.299, 0.587, 0.114));
     color = mix(vec3(luma), color, uSaturation);
-    fragColor = vec4(clamp(color, 0.0, 1.0), uAlpha);
+
+    if (uGradeAmount > 0.001) {
+        vec3 graded = color + uLift;
+        graded = pow(max(graded, vec3(0.0)), vec3(1.0 / max(uGamma, 0.01)));
+        graded *= uGain;
+        color = mix(color, graded, uGradeAmount);
+    }
+
+    float alpha = uAlpha;
+    if (uKeyMode > 0) {
+        float dist = distance(color, uKeyColor);
+        float edge0 = max(uKeySimilarity - uKeySmoothness, 0.0);
+        float edge1 = uKeySimilarity + uKeySmoothness;
+        float mask = smoothstep(edge0, edge1, dist);
+        alpha *= mask;
+        if (uKeyMode == 2 && uKeySpill > 0.0) {
+            float spill = (1.0 - mask) * uKeySpill;
+            float keyedLuma = dot(color, vec3(0.299, 0.587, 0.114));
+            color = mix(color, vec3(keyedLuma), spill);
+        }
+    }
+
+    fragColor = vec4(clamp(color, 0.0, 1.0), clamp(alpha, 0.0, 1.0));
 }
 )";
 
@@ -64,8 +138,23 @@ in vec2 vTexCoord;
 out vec4 fragColor;
 uniform sampler2D rgbaTexture;
 uniform float uAlpha;
+uniform vec4 uCrop;
+uniform vec2 uScroll;
+uniform float uScale;
+uniform int uScrollLoop;
 void main() {
-    vec4 c = texture(rgbaTexture, vTexCoord);
+    vec2 local = vTexCoord;
+    if (uScrollLoop == 1) {
+        local = fract(local + uScroll);
+    } else {
+        local = clamp(local + uScroll, 0.0, 1.0);
+    }
+    vec2 minUv = vec2(uCrop.x, uCrop.y);
+    vec2 maxUv = vec2(1.0 - uCrop.z, 1.0 - uCrop.w);
+    vec2 center = 0.5 * (minUv + maxUv);
+    vec2 span = max(maxUv - minUv, vec2(0.001));
+    vec2 uv = clamp(center + (local - 0.5) * span / max(uScale, 0.05), minUv, maxUv);
+    vec4 c = texture(rgbaTexture, uv);
     fragColor = vec4(c.rgb, c.a * uAlpha);
 }
 )";
@@ -162,10 +251,6 @@ void blendImageOnto(QImage& canvas, const QImage& overlay, const QRect& targetRe
 }
 
 void applyColorCorrection(QImage& image, const FilterRenderParams& filters) {
-    if (std::abs(filters.brightness) < 0.001f && std::abs(filters.contrast - 1.0f) < 0.001f
-        && std::abs(filters.saturation - 1.0f) < 0.001f) {
-        return;
-    }
     for (int y = 0; y < image.height(); ++y) {
         auto* line = reinterpret_cast<QRgb*>(image.scanLine(y));
         for (int x = 0; x < image.width(); ++x) {
@@ -173,6 +258,8 @@ void applyColorCorrection(QImage& image, const FilterRenderParams& filters) {
             float r = qRed(p) / 255.0f;
             float g = qGreen(p) / 255.0f;
             float b = qBlue(p) / 255.0f;
+            int a = qAlpha(p);
+
             r = (r - 0.5f) * filters.contrast + 0.5f + filters.brightness;
             g = (g - 0.5f) * filters.contrast + 0.5f + filters.brightness;
             b = (b - 0.5f) * filters.contrast + 0.5f + filters.brightness;
@@ -180,12 +267,84 @@ void applyColorCorrection(QImage& image, const FilterRenderParams& filters) {
             r = luma + (r - luma) * filters.saturation;
             g = luma + (g - luma) * filters.saturation;
             b = luma + (b - luma) * filters.saturation;
+
+            if (filters.gradeAmount > 0.001f) {
+                auto grade = [&](float c) {
+                    c = c + filters.lift;
+                    c = std::pow(std::max(0.0f, c), 1.0f / std::max(0.01f, filters.gamma));
+                    return c * filters.gain;
+                };
+                r = r + (grade(r) - r) * filters.gradeAmount;
+                g = g + (grade(g) - g) * filters.gradeAmount;
+                b = b + (grade(b) - b) * filters.gradeAmount;
+            }
+
+            if (filters.keyMode > 0) {
+                const float dr = r - filters.keyR;
+                const float dg = g - filters.keyG;
+                const float db = b - filters.keyB;
+                const float dist = std::sqrt(dr * dr + dg * dg + db * db);
+                const float edge0 = std::max(filters.keySimilarity - filters.keySmoothness, 0.0f);
+                const float edge1 = filters.keySimilarity + filters.keySmoothness;
+                float t = 0.0f;
+                if (edge1 > edge0) {
+                    t = std::clamp((dist - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+                } else {
+                    t = dist >= filters.keySimilarity ? 1.0f : 0.0f;
+                }
+                a = static_cast<int>(a * t);
+                if (filters.keyMode == 2 && filters.keySpill > 0.0f) {
+                    const float spill = (1.0f - t) * filters.keySpill;
+                    const float keyedLuma = 0.299f * r + 0.587f * g + 0.114f * b;
+                    r = r + (keyedLuma - r) * spill;
+                    g = g + (keyedLuma - g) * spill;
+                    b = b + (keyedLuma - b) * spill;
+                }
+            }
+
             line[x] = qRgba(std::clamp(static_cast<int>(r * 255.0f), 0, 255),
                             std::clamp(static_cast<int>(g * 255.0f), 0, 255),
                             std::clamp(static_cast<int>(b * 255.0f), 0, 255),
-                            qAlpha(p));
+                            std::clamp(a, 0, 255));
         }
     }
+}
+
+QImage applyCropScaleScroll(const QImage& src, const FilterRenderParams& filters, double clockSec) {
+    if (src.isNull()) {
+        return src;
+    }
+    const int w = src.width();
+    const int h = src.height();
+    const int left = static_cast<int>(filters.cropLeft * w);
+    const int top = static_cast<int>(filters.cropTop * h);
+    const int right = static_cast<int>(filters.cropRight * w);
+    const int bottom = static_cast<int>(filters.cropBottom * h);
+    QRect region(left, top, std::max(1, w - left - right), std::max(1, h - top - bottom));
+    QImage cropped = src.copy(region);
+    if (std::abs(filters.scale - 1.0f) > 0.001f) {
+        const int nw = std::max(1, static_cast<int>(cropped.width() * filters.scale));
+        const int nh = std::max(1, static_cast<int>(cropped.height() * filters.scale));
+        cropped = cropped.scaled(nw, nh, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+    }
+    if (std::abs(filters.scrollSpeedX) > 0.0001f || std::abs(filters.scrollSpeedY) > 0.0001f) {
+        QImage out(cropped.size(), QImage::Format_ARGB32);
+        out.fill(Qt::transparent);
+        const int ox = static_cast<int>(std::fmod(filters.scrollSpeedX * clockSec, 1.0) * cropped.width());
+        const int oy = static_cast<int>(std::fmod(filters.scrollSpeedY * clockSec, 1.0) * cropped.height());
+        QPainter p(&out);
+        if (filters.scrollLoop) {
+            p.drawImage(ox, oy, cropped);
+            p.drawImage(ox - cropped.width(), oy, cropped);
+            p.drawImage(ox, oy - cropped.height(), cropped);
+            p.drawImage(ox - cropped.width(), oy - cropped.height(), cropped);
+        } else {
+            p.drawImage(ox, oy, cropped);
+        }
+        p.end();
+        return out;
+    }
+    return cropped;
 }
 
 } // namespace
@@ -275,12 +434,18 @@ bool GLCompositor::initGl() {
     nv12Shader_ = std::make_unique<QOpenGLShaderProgram>();
     nv12Shader_->addShaderFromSourceCode(QOpenGLShader::Vertex, kVertexShader);
     nv12Shader_->addShaderFromSourceCode(QOpenGLShader::Fragment, kNv12FragmentShader);
-    nv12Shader_->link();
+    if (!nv12Shader_->link()) {
+        Logger::error("Compositor: NV12 shader link failed: "
+                      + nv12Shader_->log().toStdString());
+        return false;
+    }
 
     rgbaShader_ = std::make_unique<QOpenGLShaderProgram>();
     rgbaShader_->addShaderFromSourceCode(QOpenGLShader::Vertex, kVertexShader);
     rgbaShader_->addShaderFromSourceCode(QOpenGLShader::Fragment, kRgbaFragmentShader);
-    rgbaShader_->link();
+    if (!rgbaShader_->link()) {
+        Logger::warn("Compositor: RGBA shader link failed: " + rgbaShader_->log().toStdString());
+    }
 
     context_->functions()->glEnable(GL_BLEND);
     context_->functions()->glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -342,6 +507,21 @@ void GLCompositor::drawLayer(const VideoFrame& frame, const SourceTransform& tra
     nv12Shader_->setUniformValue("uBrightness", 0.0f);
     nv12Shader_->setUniformValue("uContrast", 1.0f);
     nv12Shader_->setUniformValue("uSaturation", 1.0f);
+    nv12Shader_->setUniformValue("uCrop", QVector4D(0, 0, 0, 0));
+    nv12Shader_->setUniformValue("uScroll", QVector2D(0, 0));
+    nv12Shader_->setUniformValue("uScale", 1.0f);
+    nv12Shader_->setUniformValue("uSharpness", 0.0f);
+    nv12Shader_->setUniformValue("uTexelSize", QVector2D(1.0f / frame.width, 1.0f / frame.height));
+    nv12Shader_->setUniformValue("uKeyMode", 0);
+    nv12Shader_->setUniformValue("uKeyColor", QVector3D(0, 1, 0));
+    nv12Shader_->setUniformValue("uKeySimilarity", 0.4f);
+    nv12Shader_->setUniformValue("uKeySmoothness", 0.08f);
+    nv12Shader_->setUniformValue("uKeySpill", 0.0f);
+    nv12Shader_->setUniformValue("uGradeAmount", 0.0f);
+    nv12Shader_->setUniformValue("uLift", 0.0f);
+    nv12Shader_->setUniformValue("uGamma", 1.0f);
+    nv12Shader_->setUniformValue("uGain", 1.0f);
+    nv12Shader_->setUniformValue("uScrollLoop", 1);
     yTex.bind(0);
     uvTex.bind(1);
 
@@ -357,6 +537,31 @@ void GLCompositor::drawLayer(const VideoFrame& frame, const SourceTransform& tra
     nv12Shader_->release();
 }
 
+std::optional<VideoFrame> GLCompositor::delayedFrame(const std::string& sourceId, VideoFrame frame,
+                                                     int delayMs) {
+    if (delayMs <= 0) {
+        delayQueues_.erase(sourceId);
+        return frame;
+    }
+    const auto now = std::chrono::steady_clock::now().time_since_epoch();
+    const int64_t nowUs = std::chrono::duration_cast<std::chrono::microseconds>(now).count();
+    auto& queue = delayQueues_[sourceId];
+    queue.push_back({nowUs, std::move(frame)});
+    const int64_t delayUs = static_cast<int64_t>(delayMs) * 1000;
+    std::optional<VideoFrame> ready;
+    while (!queue.empty() && (nowUs - queue.front().first) >= delayUs) {
+        ready = std::move(queue.front().second);
+        queue.pop_front();
+    }
+    // Cap memory (~delay + 250ms at 60fps ≈ delayMs/16 + 15 frames).
+    const size_t maxFrames =
+        static_cast<size_t>(std::max(2, delayMs / 16 + 20));
+    while (queue.size() > maxFrames) {
+        queue.pop_front();
+    }
+    return ready;
+}
+
 void GLCompositor::renderScene(const Scene& scene, float alpha, float xOffset) {
     if (!registry_ || alpha <= 0.0f) {
         return;
@@ -370,11 +575,17 @@ void GLCompositor::renderScene(const Scene& scene, float alpha, float xOffset) {
         if (!provider || !provider->hasVideo()) {
             continue;
         }
-        auto frame = provider->latestVideoFrame();
-        if (!frame.has_value() || frame->format == PixelFormat::RGBA32) {
+        auto frameOpt = provider->latestVideoFrame();
+        if (!frameOpt.has_value() || frameOpt->format == PixelFormat::RGBA32) {
             continue;
         }
         const FilterRenderParams filters = resolveFilters(src);
+        auto delayed = delayedFrame(src.id, std::move(*frameOpt), filters.renderDelayMs);
+        if (!delayed.has_value()) {
+            continue;
+        }
+        const VideoFrame& frame = *delayed;
+
         const float layerAlpha = alpha * filters.opacity;
         if (layerAlpha <= 0.0f) {
             continue;
@@ -394,17 +605,20 @@ void GLCompositor::renderScene(const Scene& scene, float alpha, float xOffset) {
         };
 
         QOpenGLTexture yTex(QOpenGLTexture::Target2D);
-        yTex.setSize(frame->width, frame->height);
+        yTex.setSize(frame.width, frame.height);
         yTex.setFormat(QOpenGLTexture::R8_UNorm);
         yTex.allocateStorage();
-        yTex.setData(QOpenGLTexture::Red, QOpenGLTexture::UInt8, frame->data.data());
+        yTex.setData(QOpenGLTexture::Red, QOpenGLTexture::UInt8, frame.data.data());
 
         QOpenGLTexture uvTex(QOpenGLTexture::Target2D);
-        uvTex.setSize(frame->width / 2, frame->height / 2);
+        uvTex.setSize(frame.width / 2, frame.height / 2);
         uvTex.setFormat(QOpenGLTexture::RG8_UNorm);
         uvTex.allocateStorage();
-        const size_t ySize = static_cast<size_t>(frame->width) * static_cast<size_t>(frame->height);
-        uvTex.setData(QOpenGLTexture::RG, QOpenGLTexture::UInt8, frame->data.data() + ySize);
+        const size_t ySize = static_cast<size_t>(frame.width) * static_cast<size_t>(frame.height);
+        uvTex.setData(QOpenGLTexture::RG, QOpenGLTexture::UInt8, frame.data.data() + ySize);
+
+        const float scrollX = static_cast<float>(filters.scrollSpeedX * scrollClockSec_);
+        const float scrollY = static_cast<float>(filters.scrollSpeedY * scrollClockSec_);
 
         nv12Shader_->bind();
         nv12Shader_->setUniformValue("yTexture", 0);
@@ -413,6 +627,25 @@ void GLCompositor::renderScene(const Scene& scene, float alpha, float xOffset) {
         nv12Shader_->setUniformValue("uBrightness", filters.brightness);
         nv12Shader_->setUniformValue("uContrast", filters.contrast);
         nv12Shader_->setUniformValue("uSaturation", filters.saturation);
+        nv12Shader_->setUniformValue(
+            "uCrop", QVector4D(filters.cropLeft, filters.cropTop, filters.cropRight,
+                               filters.cropBottom));
+        nv12Shader_->setUniformValue("uScroll", QVector2D(scrollX, scrollY));
+        nv12Shader_->setUniformValue("uScale", filters.scale);
+        nv12Shader_->setUniformValue("uSharpness", filters.sharpness);
+        nv12Shader_->setUniformValue(
+            "uTexelSize", QVector2D(1.0f / std::max(1, frame.width), 1.0f / std::max(1, frame.height)));
+        nv12Shader_->setUniformValue("uKeyMode", filters.keyMode);
+        nv12Shader_->setUniformValue("uKeyColor",
+                                     QVector3D(filters.keyR, filters.keyG, filters.keyB));
+        nv12Shader_->setUniformValue("uKeySimilarity", filters.keySimilarity);
+        nv12Shader_->setUniformValue("uKeySmoothness", filters.keySmoothness);
+        nv12Shader_->setUniformValue("uKeySpill", filters.keySpill);
+        nv12Shader_->setUniformValue("uGradeAmount", filters.gradeAmount);
+        nv12Shader_->setUniformValue("uLift", filters.lift);
+        nv12Shader_->setUniformValue("uGamma", filters.gamma);
+        nv12Shader_->setUniformValue("uGain", filters.gain);
+        nv12Shader_->setUniformValue("uScrollLoop", filters.scrollLoop ? 1 : 0);
         yTex.bind(0);
         uvTex.bind(1);
         nv12Shader_->enableAttributeArray(0);
@@ -448,12 +681,33 @@ void GLCompositor::compositeRgbaOverlays(const Scene& scene, float alpha, QImage
         }
 
         const FilterRenderParams filters = resolveFilters(src);
+        auto delayed = delayedFrame(src.id + ":rgba", std::move(*frame), filters.renderDelayMs);
+        if (!delayed.has_value()) {
+            continue;
+        }
+
         const float opacity = alpha * filters.opacity;
         if (opacity <= 0.0f) {
             continue;
         }
 
-        QImage overlay = rgbaFrameToImage(*frame);
+        QImage overlay = applyCropScaleScroll(rgbaFrameToImage(*delayed), filters, scrollClockSec_);
+        if (filters.maskEnabled && !filters.maskPath.empty()) {
+            QImage mask(QString::fromStdString(filters.maskPath));
+            if (!mask.isNull()) {
+                mask = mask.convertToFormat(QImage::Format_ARGB32)
+                           .scaled(overlay.size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+                for (int y = 0; y < overlay.height(); ++y) {
+                    auto* dst = reinterpret_cast<QRgb*>(overlay.scanLine(y));
+                    const auto* m = reinterpret_cast<const QRgb*>(mask.constScanLine(y));
+                    for (int x = 0; x < overlay.width(); ++x) {
+                        const int ma = static_cast<int>(qAlpha(m[x]) * filters.maskOpacity);
+                        dst[x] = qRgba(qRed(dst[x]), qGreen(dst[x]), qBlue(dst[x]),
+                                       (qAlpha(dst[x]) * ma) / 255);
+                    }
+                }
+            }
+        }
         applyColorCorrection(overlay, filters);
         const QRect target(static_cast<int>(src.transform.x + xOffset),
                            static_cast<int>(src.transform.y),
@@ -502,8 +756,11 @@ void GLCompositor::compositorThreadFunc() {
     const int fps = std::max(1, fps_.load());
     const auto frameInterval = std::chrono::microseconds(1'000'000 / fps);
     auto nextFrameTime = std::chrono::steady_clock::now();
+    const auto clockStart = nextFrameTime;
 
     while (!stopRequested_.load()) {
+        scrollClockSec_ = std::chrono::duration<double>(std::chrono::steady_clock::now() - clockStart)
+                              .count();
         sceneManager.updateTransition();
         sceneManager.tickAutoSave();
 

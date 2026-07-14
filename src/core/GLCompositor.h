@@ -6,8 +6,15 @@
 #include "core/models/SceneManager.h"
 
 #include <atomic>
+#include <chrono>
+#include <deque>
 #include <memory>
+#include <mutex>
+#include <optional>
+#include <string>
 #include <thread>
+#include <unordered_map>
+#include <utility>
 
 class QOffscreenSurface;
 class QOpenGLContext;
@@ -55,6 +62,8 @@ private:
                                float xOffset = 0.0f);
     void readbackNv12(const Scene* sceneA, float alphaA, const Scene* sceneB, float alphaB,
                       VideoFrame& output, float offsetA = 0.0f, float offsetB = 0.0f);
+    [[nodiscard]] std::optional<VideoFrame> delayedFrame(const std::string& sourceId,
+                                                         VideoFrame frame, int delayMs);
 
     SourceRegistry* registry_ = nullptr;
     ThreadSafeQueue<VideoFrame>* outputQueue_ = nullptr;
@@ -76,6 +85,9 @@ private:
     std::unique_ptr<std::thread> compositorThread_;
     std::atomic<bool> running_{false};
     std::atomic<bool> stopRequested_{false};
+
+    std::unordered_map<std::string, std::deque<std::pair<int64_t, VideoFrame>>> delayQueues_;
+    double scrollClockSec_ = 0.0;
 };
 
 } // namespace railshot

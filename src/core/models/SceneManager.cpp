@@ -107,6 +107,24 @@ QString filterTypeToString(FilterType type) {
         return QStringLiteral("NoiseGate");
     case FilterType::NoiseSuppress:
         return QStringLiteral("NoiseSuppress");
+    case FilterType::Crop:
+        return QStringLiteral("Crop");
+    case FilterType::ChromaKey:
+        return QStringLiteral("ChromaKey");
+    case FilterType::ColorKey:
+        return QStringLiteral("ColorKey");
+    case FilterType::ImageMask:
+        return QStringLiteral("ImageMask");
+    case FilterType::ColorGrade:
+        return QStringLiteral("ColorGrade");
+    case FilterType::Scale:
+        return QStringLiteral("Scale");
+    case FilterType::Scroll:
+        return QStringLiteral("Scroll");
+    case FilterType::Sharpness:
+        return QStringLiteral("Sharpness");
+    case FilterType::RenderDelay:
+        return QStringLiteral("RenderDelay");
     case FilterType::Opacity:
     default:
         return QStringLiteral("Opacity");
@@ -119,6 +137,15 @@ FilterType filterTypeFromString(const QString& s) {
     if (s == "Compressor") return FilterType::Compressor;
     if (s == "NoiseGate") return FilterType::NoiseGate;
     if (s == "NoiseSuppress") return FilterType::NoiseSuppress;
+    if (s == "Crop") return FilterType::Crop;
+    if (s == "ChromaKey") return FilterType::ChromaKey;
+    if (s == "ColorKey") return FilterType::ColorKey;
+    if (s == "ImageMask") return FilterType::ImageMask;
+    if (s == "ColorGrade") return FilterType::ColorGrade;
+    if (s == "Scale") return FilterType::Scale;
+    if (s == "Scroll") return FilterType::Scroll;
+    if (s == "Sharpness") return FilterType::Sharpness;
+    if (s == "RenderDelay") return FilterType::RenderDelay;
     return FilterType::Opacity;
 }
 

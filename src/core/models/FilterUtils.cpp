@@ -189,22 +189,163 @@ void applyNoiseSuppress(AudioFrame& frame, float suppressDb) {
 
 FilterRenderParams resolveFilters(const Source& source) {
     FilterRenderParams params;
+
+    // Scene-item crop (pixels) → relative UV insets.
+    if (source.transform.width > 1.0f && source.transform.height > 1.0f) {
+        params.cropLeft = std::max(0.0f, source.transform.cropLeft / source.transform.width);
+        params.cropTop = std::max(0.0f, source.transform.cropTop / source.transform.height);
+        params.cropRight = std::max(0.0f, source.transform.cropRight / source.transform.width);
+        params.cropBottom = std::max(0.0f, source.transform.cropBottom / source.transform.height);
+    }
+
+    auto parseKeyRgb = [](const QJsonObject& obj, float& r, float& g, float& b) {
+        const QString type = obj.value(QStringLiteral("key_color_type")).toString(QStringLiteral("green"));
+        if (type == QLatin1String("blue")) {
+            r = 0.0f;
+            g = 0.0f;
+            b = 1.0f;
+        } else if (type == QLatin1String("magenta")) {
+            r = 1.0f;
+            g = 0.0f;
+            b = 1.0f;
+        } else if (type == QLatin1String("red")) {
+            r = 1.0f;
+            g = 0.0f;
+            b = 0.0f;
+        } else if (type == QLatin1String("custom") || obj.contains(QStringLiteral("key_color"))) {
+            const QJsonValue v = obj.value(QStringLiteral("key_color"));
+            unsigned color = 0x00FF00u;
+            if (v.isString()) {
+                QString hex = v.toString().trimmed();
+                if (hex.startsWith(QLatin1Char('#'))) {
+                    hex = hex.mid(1);
+                }
+                bool ok = false;
+                color = hex.toUInt(&ok, 16);
+                if (!ok) {
+                    color = 0x00FF00u;
+                }
+            } else {
+                color = static_cast<unsigned>(v.toInt(0x00FF00));
+            }
+            r = static_cast<float>((color >> 16) & 0xFF) / 255.0f;
+            g = static_cast<float>((color >> 8) & 0xFF) / 255.0f;
+            b = static_cast<float>(color & 0xFF) / 255.0f;
+        } else {
+            r = 0.0f;
+            g = 1.0f;
+            b = 0.0f;
+        }
+    };
+
     for (const auto& filter : source.filters) {
         if (!filter.enabled) {
             continue;
         }
         const QJsonDocument doc = QJsonDocument::fromJson(QByteArray::fromStdString(filter.paramsJson));
         const QJsonObject obj = doc.isObject() ? doc.object() : QJsonObject{};
-        if (filter.type == FilterType::Opacity) {
-            const float opacity = static_cast<float>(obj.value(QStringLiteral("opacity")).toDouble(1.0));
+        switch (filter.type) {
+        case FilterType::Opacity: {
+            const float opacity =
+                static_cast<float>(obj.value(QStringLiteral("opacity")).toDouble(1.0));
             params.opacity *= std::clamp(opacity, 0.0f, 1.0f);
-        } else if (filter.type == FilterType::ColorCorrection) {
-            params.brightness = static_cast<float>(obj.value(QStringLiteral("brightness")).toDouble(0.0));
-            params.contrast = static_cast<float>(obj.value(QStringLiteral("contrast")).toDouble(1.0));
-            params.saturation = static_cast<float>(obj.value(QStringLiteral("saturation")).toDouble(1.0));
+            break;
+        }
+        case FilterType::ColorCorrection:
+            params.brightness =
+                static_cast<float>(obj.value(QStringLiteral("brightness")).toDouble(0.0));
+            params.contrast =
+                static_cast<float>(obj.value(QStringLiteral("contrast")).toDouble(1.0));
+            params.saturation =
+                static_cast<float>(obj.value(QStringLiteral("saturation")).toDouble(1.0));
             params.brightness = std::clamp(params.brightness, -1.0f, 1.0f);
             params.contrast = std::clamp(params.contrast, 0.0f, 2.0f);
             params.saturation = std::clamp(params.saturation, 0.0f, 2.0f);
+            break;
+        case FilterType::Crop: {
+            const bool relative = obj.value(QStringLiteral("relative")).toBool(true);
+            float l = static_cast<float>(obj.value(QStringLiteral("left")).toDouble(0.0));
+            float t = static_cast<float>(obj.value(QStringLiteral("top")).toDouble(0.0));
+            float r = static_cast<float>(obj.value(QStringLiteral("right")).toDouble(0.0));
+            float b = static_cast<float>(obj.value(QStringLiteral("bottom")).toDouble(0.0));
+            if (!relative && source.transform.width > 1.0f && source.transform.height > 1.0f) {
+                l /= source.transform.width;
+                t /= source.transform.height;
+                r /= source.transform.width;
+                b /= source.transform.height;
+            }
+            params.cropLeft = std::clamp(params.cropLeft + l, 0.0f, 0.49f);
+            params.cropTop = std::clamp(params.cropTop + t, 0.0f, 0.49f);
+            params.cropRight = std::clamp(params.cropRight + r, 0.0f, 0.49f);
+            params.cropBottom = std::clamp(params.cropBottom + b, 0.0f, 0.49f);
+            break;
+        }
+        case FilterType::Scale: {
+            const float sx = static_cast<float>(obj.value(QStringLiteral("scale")).toDouble(1.0));
+            params.scale = std::clamp(sx, 0.05f, 8.0f);
+            break;
+        }
+        case FilterType::Scroll:
+            params.scrollSpeedX =
+                static_cast<float>(obj.value(QStringLiteral("speed_x")).toDouble(0.0));
+            params.scrollSpeedY =
+                static_cast<float>(obj.value(QStringLiteral("speed_y")).toDouble(0.0));
+            params.scrollLoop = obj.value(QStringLiteral("loop")).toBool(true);
+            break;
+        case FilterType::Sharpness:
+            params.sharpness = std::clamp(
+                static_cast<float>(obj.value(QStringLiteral("sharpness")).toDouble(0.08)), 0.0f,
+                1.0f);
+            break;
+        case FilterType::ColorKey:
+            params.keyMode = 1;
+            parseKeyRgb(obj, params.keyR, params.keyG, params.keyB);
+            params.keySimilarity = std::clamp(
+                static_cast<float>(obj.value(QStringLiteral("similarity")).toDouble(80.0)) / 1000.0f,
+                0.01f, 1.0f);
+            params.keySmoothness = std::clamp(
+                static_cast<float>(obj.value(QStringLiteral("smoothness")).toDouble(50.0)) / 1000.0f,
+                0.001f, 1.0f);
+            break;
+        case FilterType::ChromaKey:
+            params.keyMode = 2;
+            parseKeyRgb(obj, params.keyR, params.keyG, params.keyB);
+            params.keySimilarity = std::clamp(
+                static_cast<float>(obj.value(QStringLiteral("similarity")).toDouble(400.0))
+                    / 1000.0f,
+                0.01f, 1.0f);
+            params.keySmoothness = std::clamp(
+                static_cast<float>(obj.value(QStringLiteral("smoothness")).toDouble(80.0)) / 1000.0f,
+                0.001f, 1.0f);
+            params.keySpill = std::clamp(
+                static_cast<float>(obj.value(QStringLiteral("spill")).toDouble(100.0)) / 1000.0f,
+                0.0f, 1.0f);
+            break;
+        case FilterType::ColorGrade:
+            params.gradeAmount = std::clamp(
+                static_cast<float>(obj.value(QStringLiteral("clut_amount")).toDouble(1.0)), 0.0f,
+                1.0f);
+            params.lift =
+                static_cast<float>(obj.value(QStringLiteral("lift")).toDouble(0.0));
+            params.gamma = std::max(
+                0.01f, static_cast<float>(obj.value(QStringLiteral("gamma")).toDouble(1.0)));
+            params.gain =
+                static_cast<float>(obj.value(QStringLiteral("gain")).toDouble(1.0));
+            params.lutPath = obj.value(QStringLiteral("image_path")).toString().toStdString();
+            params.lutAmount = params.gradeAmount;
+            break;
+        case FilterType::ImageMask:
+            params.maskEnabled = true;
+            params.maskPath = obj.value(QStringLiteral("image_path")).toString().toStdString();
+            params.maskOpacity = std::clamp(
+                static_cast<float>(obj.value(QStringLiteral("opacity")).toDouble(1.0)), 0.0f,
+                1.0f);
+            break;
+        case FilterType::RenderDelay:
+            params.renderDelayMs = std::clamp(obj.value(QStringLiteral("delay_ms")).toInt(0), 0, 5000);
+            break;
+        default:
+            break;
         }
     }
     return params;

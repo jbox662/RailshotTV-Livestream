@@ -35,14 +35,22 @@ enum class FilterType {
     Gain,
     Compressor,
     NoiseGate,
-    NoiseSuppress
+    NoiseSuppress,
+    Crop,
+    ChromaKey,
+    ColorKey,
+    ImageMask,
+    ColorGrade,
+    Scale,
+    Scroll,
+    Sharpness,
+    RenderDelay
 };
 
 struct SourceFilter {
     std::string id;
     FilterType type = FilterType::Opacity;
     bool enabled = true;
-    // Opacity / ColorCorrection / Gain / Compressor / NoiseGate / NoiseSuppress JSON
     std::string paramsJson;
 };
 
@@ -67,16 +75,14 @@ struct Source {
     bool locked = false;
     int zOrder = 0;
 
-    // VideoDevice / AudioDevice device id, or file path for Image / MediaFile
     std::string pathOrDeviceId;
 
     int volume = 100;
     bool muted = false;
-    int syncDelayMs = 0; // OBS-like audio sync offset (ms), delayed into the mix
+    int syncDelayMs = 0;
     bool loop = true;
     bool isoRecording = false;
 
-    // JSON settings for overlay sources (scoreboard style, browser options, etc.)
     std::string overlaySettings;
 
     std::vector<SourceFilter> filters;
@@ -102,14 +108,49 @@ struct CollectionInfo {
 
 struct FilterRenderParams {
     float opacity = 1.0f;
-    float brightness = 0.0f;  // -1..1
-    float contrast = 1.0f;    // 0..2
-    float saturation = 1.0f;  // 0..2
+    float brightness = 0.0f;
+    float contrast = 1.0f;
+    float saturation = 1.0f;
+
+    // Relative crop insets 0..1
+    float cropLeft = 0.0f;
+    float cropTop = 0.0f;
+    float cropRight = 0.0f;
+    float cropBottom = 0.0f;
+
+    float scale = 1.0f; // UV zoom (1 = identity)
+
+    float scrollSpeedX = 0.0f; // UV units / second
+    float scrollSpeedY = 0.0f;
+    bool scrollLoop = true;
+
+    float sharpness = 0.0f; // 0..1
+
+    int keyMode = 0; // 0 none, 1 color key, 2 chroma key
+    float keyR = 0.0f;
+    float keyG = 1.0f;
+    float keyB = 0.0f;
+    float keySimilarity = 0.4f; // 0..1
+    float keySmoothness = 0.08f;
+    float keySpill = 0.1f;
+
+    float gradeAmount = 0.0f;
+    float lift = 0.0f;
+    float gamma = 1.0f;
+    float gain = 1.0f;
+
+    bool maskEnabled = false;
+    float maskOpacity = 1.0f;
+    std::string maskPath;
+
+    float lutAmount = 0.0f;
+    std::string lutPath;
+
+    int renderDelayMs = 0;
 };
 
 FilterRenderParams resolveFilters(const Source& source);
 
-// Apply enabled audio filters in order onto an S16 PCM frame (in place).
 void applyAudioFilters(const Source& source, AudioFrame& frame);
 
 } // namespace railshot

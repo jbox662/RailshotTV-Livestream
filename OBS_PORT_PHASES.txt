@@ -31,11 +31,11 @@
 #   [x] Device / desktop audio completeness (app/process audio → F4)
 #   [x] Audio filters: gain, compressor, noise suppression/gate
 #
-# Phase F3 — Video filter catalog — NEXT
-#   [ ] Crop, chroma/color key, mask, LUT/color grade
-#   [ ] Scale, scroll, sharpness, render delay
+# Phase F3 — Video filter catalog — DONE
+#   [x] Crop, chroma/color key, mask, LUT/color grade
+#   [x] Scale, scroll, sharpness, render delay
 #
-# Phase F4 — Capture parity
+# Phase F4 — Capture parity — NEXT
 #   [ ] Game Capture (graphics hooks)
 #   [ ] Window Capture via WGC
 #   [ ] Application Audio Capture
