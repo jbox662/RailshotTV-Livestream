@@ -15,8 +15,11 @@ Use this checklist for every public Windows build. The packaging steps are autom
 - [ ] Confirm these artifacts exist:
   - `dist\RailShotTV-Windows-x64.zip`
   - `dist\installer\RailShotTV-Windows-x64-Setup.exe`
+  - `dist\SHA256SUMS.txt`
   - `dist\RailShotTV\SHA256SUMS.txt`
-- [ ] Code-sign the application, virtual-camera DLL, and installer when a signing certificate is available.
+- [ ] When a signing certificate is available, pass
+  `-SigningCertificateThumbprint "CERTIFICATE_THUMBPRINT"` to the packaging script.
+- [ ] Verify Authenticode signatures on the application, virtual-camera DLL, and installer.
 - [ ] Scan the installer and ZIP with the organization’s malware-scanning service.
 
 ## Clean-machine installation

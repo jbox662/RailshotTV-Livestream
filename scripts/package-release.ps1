@@ -2,7 +2,9 @@ param(
     [ValidateSet("Release", "RelWithDebInfo")]
     [string]$Configuration = "Release",
     [switch]$SkipBuild,
-    [switch]$BuildInstaller
+    [switch]$BuildInstaller,
+    [string]$SigningCertificateThumbprint,
+    [string]$TimestampUrl = "http://timestamp.digicert.com"
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,7 +35,44 @@ function Copy-Dlls([string]$SourceDirectory, [string]$Destination) {
         }
 }
 
+function Find-SignTool {
+    $command = Get-Command signtool.exe -ErrorAction SilentlyContinue
+    if ($command) {
+        return $command.Source
+    }
+
+    $kitsBin = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\bin"
+    if (Test-Path $kitsBin) {
+        $candidate = Get-ChildItem -Path $kitsBin -Filter "signtool.exe" -File -Recurse |
+            Where-Object { $_.DirectoryName -match '\\x64$' } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+        if ($candidate) {
+            return $candidate.FullName
+        }
+    }
+    throw "signtool.exe was not found. Install the Windows SDK or omit signing."
+}
+
+function Sign-Artifact([string]$Path) {
+    if (-not $SigningCertificateThumbprint) {
+        return
+    }
+    if (-not (Test-Path $Path)) {
+        throw "Signing target not found: $Path"
+    }
+    & $script:SignTool sign /sha1 $SigningCertificateThumbprint.Replace(" ", "") `
+        /fd SHA256 /tr $TimestampUrl /td SHA256 /v $Path
+    if ($LASTEXITCODE -ne 0) {
+        throw "Authenticode signing failed: $Path"
+    }
+}
+
 Write-Host "=== RailShot TV Release Packaging ===" -ForegroundColor Cyan
+
+if ($SigningCertificateThumbprint) {
+    $script:SignTool = Find-SignTool
+}
 
 if (-not $SkipBuild) {
     $cmake = (Get-Command cmake -ErrorAction SilentlyContinue).Source
@@ -144,6 +183,9 @@ foreach ($runtime in @("vcruntime140.dll", "msvcp140.dll")) {
     }
 }
 
+Sign-Artifact (Join-Path $StageDir "RailShotBroadcaster.exe")
+Sign-Artifact (Join-Path $StageDir "railshot-virtualcam64.dll")
+
 $manifest = Get-ChildItem -Path $StageDir -File -Recurse |
     Sort-Object FullName |
     ForEach-Object {
@@ -172,7 +214,20 @@ if ($BuildInstaller) {
     if ($LASTEXITCODE -ne 0) {
         throw "Installer build failed."
     }
+    Sign-Artifact (Join-Path $OutputDir "installer\RailShotTV-Windows-x64-Setup.exe")
 }
+
+$releaseArtifacts = @($zipPath)
+if ($BuildInstaller) {
+    $releaseArtifacts += Join-Path $OutputDir "installer\RailShotTV-Windows-x64-Setup.exe"
+}
+$releaseHashes = $releaseArtifacts | ForEach-Object {
+    $item = Get-Item $_
+    $hash = (Get-FileHash -Path $item.FullName -Algorithm SHA256).Hash
+    "$hash  $($item.Name)"
+}
+Set-Content -Path (Join-Path $OutputDir "SHA256SUMS.txt") `
+    -Value $releaseHashes -Encoding UTF8
 
 Write-Host "Packaged folder: $StageDir" -ForegroundColor Green
 Write-Host "Portable ZIP:    $zipPath" -ForegroundColor Green
