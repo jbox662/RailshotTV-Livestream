@@ -45,7 +45,45 @@ Name: "{autodesktop}\RailShot TV Broadcaster"; Filename: "{app}\{#MyAppExeName}"
 
 [Run]
 Filename: "{sys}\regsvr32.exe"; Parameters: "/s ""{app}\railshot-virtualcam64.dll"""; StatusMsg: "Registering RailShot Virtual Camera…"; Flags: runhidden waituntilterminated; Tasks: virtualcam
+Filename: "https://go.microsoft.com/fwlink/p/?LinkId=2124703"; Description: "Download Microsoft Edge WebView2 Runtime (required for browser sources)"; Flags: postinstall shellexec skipifsilent unchecked; Check: not WebView2Installed
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch RailShot TV Broadcaster"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 Filename: "{sys}\regsvr32.exe"; Parameters: "/u /s ""{app}\railshot-virtualcam64.dll"""; Flags: runhidden waituntilterminated; RunOnceId: "UnregisterRailShotVirtualCam"
+
+[Code]
+const
+  WebView2ClientGuid = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
+
+function WebView2Installed: Boolean;
+var
+  Version: string;
+begin
+  Version := '';
+  if IsWin64 then
+    Result :=
+      RegQueryStringValue(
+        HKLM32,
+        'SOFTWARE\Microsoft\EdgeUpdate\Clients\' + WebView2ClientGuid,
+        'pv',
+        Version)
+      or RegQueryStringValue(
+        HKCU,
+        'Software\Microsoft\EdgeUpdate\Clients\' + WebView2ClientGuid,
+        'pv',
+        Version)
+  else
+    Result :=
+      RegQueryStringValue(
+        HKLM,
+        'SOFTWARE\Microsoft\EdgeUpdate\Clients\' + WebView2ClientGuid,
+        'pv',
+        Version)
+      or RegQueryStringValue(
+        HKCU,
+        'Software\Microsoft\EdgeUpdate\Clients\' + WebView2ClientGuid,
+        'pv',
+        Version);
+
+  Result := Result and (Version <> '') and (Version <> '0.0.0.0');
+end;
