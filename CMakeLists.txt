@@ -102,10 +102,13 @@ set(SOURCES
     src/encoder/FFmpegEncoder.cpp
     src/output/RtmpOutput.cpp
     src/output/FileRecorder.cpp
+    src/output/ReplayBuffer.cpp
+    src/output/Remux.cpp
     src/output/IsoRecorder.cpp
     src/output/VirtualCamOutput.cpp
     src/output/virtualcam/shared-memory-queue.c
     src/output/virtualcam/tiny-nv12-scale.c
+    src/core/StreamServicePresets.cpp
     src/ui/BrowserSourceConfigDialog.cpp
     src/ui/ColorSourceConfigDialog.cpp
     src/ui/MediaSourceConfigDialog.cpp

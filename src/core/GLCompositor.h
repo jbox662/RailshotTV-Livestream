@@ -42,6 +42,7 @@ public:
     void setStudioModeEnabled(bool enabled);
     void setPreviewQueues(ThreadSafeQueue<VideoFrame>* programPreviewQueue,
                           ThreadSafeQueue<VideoFrame>* studioPreviewQueue);
+    void setOutputQueue(ThreadSafeQueue<VideoFrame>* outputQueue);
     void setVirtualCamOutput(VirtualCamOutput* output);
 
     [[nodiscard]] bool isRunning() const { return running_.load(); }

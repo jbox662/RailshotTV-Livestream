@@ -26,6 +26,7 @@ QJsonObject hotkeysToJson(const HotkeyBindings& h) {
     obj[QStringLiteral("scoreP1Minus")] = QString::fromStdString(h.scoreP1Minus);
     obj[QStringLiteral("scoreP2Plus")] = QString::fromStdString(h.scoreP2Plus);
     obj[QStringLiteral("scoreP2Minus")] = QString::fromStdString(h.scoreP2Minus);
+    obj[QStringLiteral("saveReplay")] = QString::fromStdString(h.saveReplay);
     return obj;
 }
 
@@ -48,6 +49,7 @@ HotkeyBindings hotkeysFromJson(const QJsonObject& obj) {
     read("scoreP1Minus", h.scoreP1Minus);
     read("scoreP2Plus", h.scoreP2Plus);
     read("scoreP2Minus", h.scoreP2Minus);
+    read("saveReplay", h.saveReplay);
     return h;
 }
 
@@ -95,11 +97,35 @@ void AppSettings::load() {
     data_.micMuted = obj.value(QStringLiteral("micMuted")).toBool(false);
     data_.micSyncDelayMs = obj.value(QStringLiteral("micSyncDelayMs")).toInt(0);
 
+    data_.videoEncoder = obj.value(QStringLiteral("videoEncoder")).toString(QStringLiteral("auto")).toStdString();
+    data_.encoderPreset =
+        obj.value(QStringLiteral("encoderPreset")).toString(QStringLiteral("default")).toStdString();
+    data_.videoBitrateKbps = obj.value(QStringLiteral("videoBitrateKbps")).toInt(6000);
+    data_.audioBitrateKbps = obj.value(QStringLiteral("audioBitrateKbps")).toInt(160);
+    data_.recordingFormat =
+        obj.value(QStringLiteral("recordingFormat")).toString(QStringLiteral("mp4")).toStdString();
+    data_.recordingDirectory =
+        obj.value(QStringLiteral("recordingDirectory")).toString().toStdString();
+    data_.recordingBitrateKbps = obj.value(QStringLiteral("recordingBitrateKbps")).toInt(0);
+    data_.replayBufferEnabled = obj.value(QStringLiteral("replayBufferEnabled")).toBool(false);
+    data_.replayBufferSeconds = obj.value(QStringLiteral("replayBufferSeconds")).toInt(30);
+    data_.streamService =
+        obj.value(QStringLiteral("streamService")).toString(QStringLiteral("Custom")).toStdString();
+    data_.streamServer = obj.value(QStringLiteral("streamServer")).toString().toStdString();
+    data_.streamKey = obj.value(QStringLiteral("streamKey")).toString().toStdString();
+
     data_.canvasWidth = std::clamp(data_.canvasWidth, 320, 7680);
     data_.canvasHeight = std::clamp(data_.canvasHeight, 240, 4320);
     data_.fps = std::clamp(data_.fps, 15, 60);
     data_.micVolume = std::clamp(data_.micVolume, 0, 100);
     data_.micSyncDelayMs = std::clamp(data_.micSyncDelayMs, 0, 2000);
+    data_.videoBitrateKbps = std::clamp(data_.videoBitrateKbps, 500, 100000);
+    data_.audioBitrateKbps = std::clamp(data_.audioBitrateKbps, 64, 512);
+    data_.recordingBitrateKbps = std::clamp(data_.recordingBitrateKbps, 0, 100000);
+    data_.replayBufferSeconds = std::clamp(data_.replayBufferSeconds, 5, 300);
+    if (data_.recordingFormat != "mkv" && data_.recordingFormat != "mov") {
+        data_.recordingFormat = "mp4";
+    }
 }
 
 bool AppSettings::save() const {
@@ -118,6 +144,18 @@ bool AppSettings::save() const {
     obj[QStringLiteral("micVolume")] = data_.micVolume;
     obj[QStringLiteral("micMuted")] = data_.micMuted;
     obj[QStringLiteral("micSyncDelayMs")] = data_.micSyncDelayMs;
+    obj[QStringLiteral("videoEncoder")] = QString::fromStdString(data_.videoEncoder);
+    obj[QStringLiteral("encoderPreset")] = QString::fromStdString(data_.encoderPreset);
+    obj[QStringLiteral("videoBitrateKbps")] = data_.videoBitrateKbps;
+    obj[QStringLiteral("audioBitrateKbps")] = data_.audioBitrateKbps;
+    obj[QStringLiteral("recordingFormat")] = QString::fromStdString(data_.recordingFormat);
+    obj[QStringLiteral("recordingDirectory")] = QString::fromStdString(data_.recordingDirectory);
+    obj[QStringLiteral("recordingBitrateKbps")] = data_.recordingBitrateKbps;
+    obj[QStringLiteral("replayBufferEnabled")] = data_.replayBufferEnabled;
+    obj[QStringLiteral("replayBufferSeconds")] = data_.replayBufferSeconds;
+    obj[QStringLiteral("streamService")] = QString::fromStdString(data_.streamService);
+    obj[QStringLiteral("streamServer")] = QString::fromStdString(data_.streamServer);
+    obj[QStringLiteral("streamKey")] = QString::fromStdString(data_.streamKey);
 
     const QByteArray bytes = QJsonDocument(obj).toJson(QJsonDocument::Indented);
     std::ofstream out(savePath_, std::ios::binary | std::ios::trunc);
@@ -143,6 +181,13 @@ void AppSettings::setData(const AppSettingsData& data) {
         data_.fps = std::clamp(data_.fps, 15, 60);
         data_.micVolume = std::clamp(data_.micVolume, 0, 100);
         data_.micSyncDelayMs = std::clamp(data_.micSyncDelayMs, 0, 2000);
+        data_.videoBitrateKbps = std::clamp(data_.videoBitrateKbps, 500, 100000);
+        data_.audioBitrateKbps = std::clamp(data_.audioBitrateKbps, 64, 512);
+        data_.recordingBitrateKbps = std::clamp(data_.recordingBitrateKbps, 0, 100000);
+        data_.replayBufferSeconds = std::clamp(data_.replayBufferSeconds, 5, 300);
+        if (data_.recordingFormat != "mkv" && data_.recordingFormat != "mov") {
+            data_.recordingFormat = "mp4";
+        }
     }
     save();
 }

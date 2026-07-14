@@ -82,9 +82,12 @@ bool FFmpegEncoder::tryOpenVideoEncoder(const char* codecName, bool hardware) {
     ctx->height = height;
     ctx->time_base = {1, fps};
     ctx->framerate = {fps, 1};
+    const AppSettingsData settings = AppSettings::instance().data();
+    const int bitrateKbps = std::max(500, settings.videoBitrateKbps);
+
     ctx->gop_size = fps * 2;
     ctx->max_b_frames = 0;
-    ctx->bit_rate = 6'000'000;
+    ctx->bit_rate = static_cast<int64_t>(bitrateKbps) * 1000;
 
     if (hardware) {
         ctx->pix_fmt = AV_PIX_FMT_NV12;
@@ -92,19 +95,23 @@ bool FFmpegEncoder::tryOpenVideoEncoder(const char* codecName, bool hardware) {
         ctx->pix_fmt = AV_PIX_FMT_YUV420P;
     }
 
+    const std::string preset = settings.encoderPreset.empty() || settings.encoderPreset == "default"
+                                   ? std::string()
+                                   : settings.encoderPreset;
+
     AVDictionary* opts = nullptr;
     if (std::string(codecName) == "libx264") {
-        av_dict_set(&opts, "preset", "veryfast", 0);
+        av_dict_set(&opts, "preset", preset.empty() ? "veryfast" : preset.c_str(), 0);
         av_dict_set(&opts, "tune", "zerolatency", 0);
     } else if (std::string(codecName) == "h264_nvenc") {
-        av_dict_set(&opts, "preset", "p4", 0);
+        av_dict_set(&opts, "preset", preset.empty() ? "p4" : preset.c_str(), 0);
         av_dict_set(&opts, "tune", "ll", 0);
         av_dict_set(&opts, "rc", "cbr", 0);
     } else if (std::string(codecName) == "h264_amf") {
-        av_dict_set(&opts, "quality", "balanced", 0);
+        av_dict_set(&opts, "quality", preset.empty() ? "balanced" : preset.c_str(), 0);
         av_dict_set(&opts, "rc", "cbr", 0);
     } else if (std::string(codecName) == "h264_qsv") {
-        av_dict_set(&opts, "preset", "medium", 0);
+        av_dict_set(&opts, "preset", preset.empty() ? "medium" : preset.c_str(), 0);
     }
 
     const int ret = avcodec_open2(ctx, codec, &opts);
@@ -125,6 +132,25 @@ bool FFmpegEncoder::tryOpenVideoEncoder(const char* codecName, bool hardware) {
 }
 
 bool FFmpegEncoder::initVideoEncoder() {
+    const std::string preferred = AppSettings::instance().data().videoEncoder;
+    auto tryPreferred = [&](const std::string& name) -> bool {
+        if (name == "libx264") {
+            return tryOpenVideoEncoder("libx264", false);
+        }
+        if (name == "h264_nvenc" || name == "h264_qsv" || name == "h264_amf") {
+            return tryOpenVideoEncoder(name.c_str(), true);
+        }
+        return false;
+    };
+
+    if (!preferred.empty() && preferred != "auto") {
+        if (tryPreferred(preferred)) {
+            return true;
+        }
+        Logger::warn("FFmpegEncoder: preferred encoder '" + preferred
+                     + "' unavailable — falling back");
+    }
+
     const char* hwCodecs[] = {"h264_nvenc", "h264_amf", "h264_qsv"};
     for (const char* codec : hwCodecs) {
         if (tryOpenVideoEncoder(codec, true)) {
@@ -147,9 +173,10 @@ bool FFmpegEncoder::initAudioEncoder() {
     }
 
     av_channel_layout_default(&audioCtx_->ch_layout, kAudioChannels);
+    const int audioKbps = std::max(64, AppSettings::instance().data().audioBitrateKbps);
     audioCtx_->sample_rate = kAudioSampleRate;
     audioCtx_->sample_fmt = AV_SAMPLE_FMT_FLTP;
-    audioCtx_->bit_rate = 128'000;
+    audioCtx_->bit_rate = static_cast<int64_t>(audioKbps) * 1000;
     audioCtx_->time_base = {1, kAudioSampleRate};
 
     const int ret = avcodec_open2(audioCtx_, codec, nullptr);

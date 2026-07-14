@@ -10,6 +10,7 @@
 #include "core/models/SceneManager.h"
 #include "encoder/FFmpegEncoder.h"
 #include "output/FileRecorder.h"
+#include "output/ReplayBuffer.h"
 #include "output/RtmpOutput.h"
 #include "output/VirtualCamOutput.h"
 
@@ -30,9 +31,11 @@ struct StreamStats {
     double dropRate = 0.0;
     bool isStreaming = false;
     bool isRecording = false;
+    bool isReplayBufferActive = false;
     bool isConnected = false;
     std::string encoderName;
     std::string recordingPath;
+    std::string lastReplayPath;
     uint64_t bytesSent = 0;
     uint64_t bytesRecorded = 0;
     int reconnectCount = 0;
@@ -56,6 +59,13 @@ public:
     bool startRecording();
     void stopRecording();
 
+    bool startReplayBuffer();
+    void stopReplayBuffer();
+    bool saveReplayBuffer();
+    [[nodiscard]] bool isReplayBufferActive() const { return replayActive_.load(); }
+
+    bool remuxRecording(const std::string& inputPath, const std::string& outputPath);
+
     bool startVirtualCamera();
     void stopVirtualCamera();
     [[nodiscard]] bool isVirtualCameraActive() const;
@@ -75,6 +85,7 @@ public:
 
     [[nodiscard]] bool isStreaming() const { return streaming_.load(); }
     [[nodiscard]] bool isRecording() const { return recording_.load(); }
+    [[nodiscard]] bool isEncoding() const { return encoding_.load(); }
     [[nodiscard]] StreamStats stats() const;
     [[nodiscard]] SourceRegistry& sourceRegistry() { return sourceRegistry_; }
 
@@ -90,10 +101,17 @@ private:
     void packetDispatchThreadFunc();
     void syncAudioMonitor();
 
+    [[nodiscard]] bool ensureEncodePipeline();
+    void maybeStopEncodePipeline();
+    void stopEncodePipeline();
+    [[nodiscard]] std::string recordingsDirectory() const;
+    [[nodiscard]] std::string makeRecordingPath(const std::string& prefix) const;
+
     std::unique_ptr<GLCompositor> compositor_;
     std::unique_ptr<FFmpegEncoder> encoder_;
     std::unique_ptr<RtmpOutput> rtmpOutput_;
     std::unique_ptr<FileRecorder> fileRecorder_;
+    std::unique_ptr<ReplayBuffer> replayBuffer_;
     std::unique_ptr<VirtualCamOutput> virtualCam_;
     std::unique_ptr<WasapiAudioMonitor> audioMonitor_;
     SourceRegistry sourceRegistry_;
@@ -113,8 +131,11 @@ private:
 
     std::string rtmpUrl_;
     std::string recordingPath_;
+    std::string lastReplayPath_;
     std::atomic<bool> streaming_{false};
     std::atomic<bool> recording_{false};
+    std::atomic<bool> encoding_{false};
+    std::atomic<bool> replayActive_{false};
     std::atomic<bool> studioModeEnabled_{false};
     std::atomic<bool> previewEngineRunning_{false};
     std::chrono::steady_clock::time_point streamStartTime_;

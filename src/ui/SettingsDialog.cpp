@@ -1,15 +1,19 @@
 #include "ui/SettingsDialog.h"
 
 #include "capture/WasapiAudioCapture.h"
+#include "core/StreamServicePresets.h"
 #include "core/models/SceneManager.h"
 
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
+#include <QFileDialog>
 #include <QFormLayout>
+#include <QHBoxLayout>
 #include <QKeySequenceEdit>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPushButton>
 #include <QSpinBox>
 #include <QTabWidget>
 #include <QVBoxLayout>
@@ -55,8 +59,8 @@ SettingsDialog::SettingsDialog(QWidget* parent)
     , original_(AppSettings::instance().data())
     , draft_(original_) {
     setWindowTitle(QStringLiteral("Settings"));
-    setMinimumSize(520, 520);
-    resize(560, 560);
+    setMinimumSize(560, 600);
+    resize(620, 640);
     setObjectName(QStringLiteral("rsSettingsDialog"));
 
     auto* root = new QVBoxLayout(this);
@@ -104,21 +108,116 @@ SettingsDialog::SettingsDialog(QWidget* parent)
     audioForm->addRow(QStringLiteral("Monitoring device"), monitorDeviceCombo_);
     audioForm->addRow(QStringLiteral("Mic/Aux device"), micDeviceCombo_);
     auto* audioHint = new QLabel(
-        QStringLiteral("Monitoring plays the mixed program audio on speakers/headphones "
-                       "(like OBS audio monitoring). Mic/Aux feeds the global mic strip.\n"
-                       "Application (process) audio capture is Phase F4."),
+        QStringLiteral("Monitoring plays the mixed program audio on speakers/headphones. "
+                       "Mic/Aux feeds the global mic strip. Application audio is available "
+                       "as an Application Audio source."),
         audioPage);
     audioHint->setWordWrap(true);
     audioHint->setObjectName(QStringLiteral("rsFieldLabel"));
     audioForm->addRow(audioHint);
     tabs->addTab(audioPage, QStringLiteral("Audio"));
 
+    auto* outputPage = new QWidget(tabs);
+    auto* outputForm = new QFormLayout(outputPage);
+    encoderCombo_ = new QComboBox(outputPage);
+    encoderCombo_->addItem(QStringLiteral("Auto (prefer hardware)"), QStringLiteral("auto"));
+    encoderCombo_->addItem(QStringLiteral("NVIDIA NVENC (H.264)"), QStringLiteral("h264_nvenc"));
+    encoderCombo_->addItem(QStringLiteral("Intel Quick Sync (H.264)"), QStringLiteral("h264_qsv"));
+    encoderCombo_->addItem(QStringLiteral("AMD AMF (H.264)"), QStringLiteral("h264_amf"));
+    encoderCombo_->addItem(QStringLiteral("x264 (software)"), QStringLiteral("libx264"));
+    encoderPresetCombo_ = new QComboBox(outputPage);
+    encoderPresetCombo_->addItem(QStringLiteral("Default"), QStringLiteral("default"));
+    encoderPresetCombo_->addItem(QStringLiteral("ultrafast / p1"), QStringLiteral("ultrafast"));
+    encoderPresetCombo_->addItem(QStringLiteral("veryfast / p4"), QStringLiteral("veryfast"));
+    encoderPresetCombo_->addItem(QStringLiteral("medium / p5"), QStringLiteral("medium"));
+    encoderPresetCombo_->addItem(QStringLiteral("slow / p7"), QStringLiteral("slow"));
+    videoBitrateSpin_ = new QSpinBox(outputPage);
+    videoBitrateSpin_->setRange(500, 100000);
+    videoBitrateSpin_->setSuffix(QStringLiteral(" kbps"));
+    audioBitrateSpin_ = new QSpinBox(outputPage);
+    audioBitrateSpin_->setRange(64, 512);
+    audioBitrateSpin_->setSuffix(QStringLiteral(" kbps"));
+    recordingFormatCombo_ = new QComboBox(outputPage);
+    recordingFormatCombo_->addItem(QStringLiteral("MP4"), QStringLiteral("mp4"));
+    recordingFormatCombo_->addItem(QStringLiteral("MKV"), QStringLiteral("mkv"));
+    recordingFormatCombo_->addItem(QStringLiteral("MOV"), QStringLiteral("mov"));
+    recordingDirEdit_ = new QLineEdit(outputPage);
+    recordingDirEdit_->setPlaceholderText(QStringLiteral("Movies/RailShot/Recordings (default)"));
+    auto* dirRow = new QWidget(outputPage);
+    auto* dirLayout = new QHBoxLayout(dirRow);
+    dirLayout->setContentsMargins(0, 0, 0, 0);
+    dirLayout->addWidget(recordingDirEdit_, 1);
+    auto* browseBtn = new QPushButton(QStringLiteral("Browse…"), dirRow);
+    connect(browseBtn, &QPushButton::clicked, this, [this]() {
+        const QString dir = QFileDialog::getExistingDirectory(
+            this, QStringLiteral("Recording folder"), recordingDirEdit_->text());
+        if (!dir.isEmpty()) {
+            recordingDirEdit_->setText(dir);
+        }
+    });
+    dirLayout->addWidget(browseBtn);
+    replayEnableCheck_ = new QCheckBox(QStringLiteral("Enable replay buffer (auto-start with stream)"),
+                                       outputPage);
+    replaySecondsSpin_ = new QSpinBox(outputPage);
+    replaySecondsSpin_->setRange(5, 300);
+    replaySecondsSpin_->setSuffix(QStringLiteral(" s"));
+    outputForm->addRow(QStringLiteral("Video encoder"), encoderCombo_);
+    outputForm->addRow(QStringLiteral("Encoder preset"), encoderPresetCombo_);
+    outputForm->addRow(QStringLiteral("Video bitrate"), videoBitrateSpin_);
+    outputForm->addRow(QStringLiteral("Audio bitrate"), audioBitrateSpin_);
+    outputForm->addRow(QStringLiteral("Recording format"), recordingFormatCombo_);
+    outputForm->addRow(QStringLiteral("Recording folder"), dirRow);
+    outputForm->addRow(replayEnableCheck_);
+    outputForm->addRow(QStringLiteral("Replay length"), replaySecondsSpin_);
+    auto* outputHint = new QLabel(
+        QStringLiteral("Encoder changes apply the next time encoding starts "
+                       "(stream, record, or replay). Recording can run without streaming. "
+                       "Save Replay uses the bound hotkey (default F12). "
+                       "Remux is available from File → Remux Recording…."),
+        outputPage);
+    outputHint->setWordWrap(true);
+    outputHint->setObjectName(QStringLiteral("rsFieldLabel"));
+    outputForm->addRow(outputHint);
+    tabs->addTab(outputPage, QStringLiteral("Output"));
+
     auto* streamPage = new QWidget(tabs);
     auto* streamForm = new QFormLayout(streamPage);
+    streamServiceCombo_ = new QComboBox(streamPage);
+    for (const auto& preset : streamServicePresets()) {
+        streamServiceCombo_->addItem(QString::fromStdString(preset.displayName),
+                                     QString::fromStdString(preset.id));
+    }
+    streamServerEdit_ = new QLineEdit(streamPage);
+    streamKeyEdit_ = new QLineEdit(streamPage);
+    streamKeyEdit_->setEchoMode(QLineEdit::Password);
     rtmpEdit_ = new QLineEdit(streamPage);
     rtmpEdit_->setPlaceholderText(QStringLiteral("rtmp://… / stream key"));
-    streamForm->addRow(QStringLiteral("Default RTMP URL"), rtmpEdit_);
+    streamForm->addRow(QStringLiteral("Service"), streamServiceCombo_);
+    streamForm->addRow(QStringLiteral("Server"), streamServerEdit_);
+    streamForm->addRow(QStringLiteral("Stream key"), streamKeyEdit_);
+    streamForm->addRow(QStringLiteral("Combined RTMP URL"), rtmpEdit_);
+    auto* streamHint = new QLabel(
+        QStringLiteral("Pick a service to fill the ingest server, then paste your stream key. "
+                       "Combined URL is used by the main bar and Start Streaming."),
+        streamPage);
+    streamHint->setWordWrap(true);
+    streamHint->setObjectName(QStringLiteral("rsFieldLabel"));
+    streamForm->addRow(streamHint);
     tabs->addTab(streamPage, QStringLiteral("Stream"));
+
+    connect(streamServiceCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this](int) { syncStreamFieldsFromService(); });
+    auto refreshCombined = [this]() {
+        const QString server = streamServerEdit_->text().trimmed();
+        const QString key = streamKeyEdit_->text().trimmed();
+        if (streamServiceCombo_->currentData().toString() == QStringLiteral("Custom") && server.isEmpty()) {
+            return;
+        }
+        rtmpEdit_->setText(QString::fromStdString(
+            combineRtmpUrl(server.toStdString(), key.toStdString())));
+    };
+    connect(streamServerEdit_, &QLineEdit::editingFinished, this, refreshCombined);
+    connect(streamKeyEdit_, &QLineEdit::editingFinished, this, refreshCombined);
 
     auto* hotkeysPage = new QWidget(tabs);
     auto* hotkeysForm = new QFormLayout(hotkeysPage);
@@ -131,6 +230,7 @@ SettingsDialog::SettingsDialog(QWidget* parent)
     hkTransition_ = makeHotkeyEdit(hotkeysPage, QString::fromStdString(original_.hotkeys.transition));
     hkStream_ = makeHotkeyEdit(hotkeysPage, QString::fromStdString(original_.hotkeys.startStopStream));
     hkRecord_ = makeHotkeyEdit(hotkeysPage, QString::fromStdString(original_.hotkeys.record));
+    hkSaveReplay_ = makeHotkeyEdit(hotkeysPage, QString::fromStdString(original_.hotkeys.saveReplay));
     hkScene1_ = makeHotkeyEdit(hotkeysPage, QString::fromStdString(original_.hotkeys.scene1));
     hkScene2_ = makeHotkeyEdit(hotkeysPage, QString::fromStdString(original_.hotkeys.scene2));
     hkScene3_ = makeHotkeyEdit(hotkeysPage, QString::fromStdString(original_.hotkeys.scene3));
@@ -142,6 +242,7 @@ SettingsDialog::SettingsDialog(QWidget* parent)
     hotkeysForm->addRow(QStringLiteral("Studio transition"), hkTransition_);
     hotkeysForm->addRow(QStringLiteral("Start / stop stream"), hkStream_);
     hotkeysForm->addRow(QStringLiteral("Start / stop record"), hkRecord_);
+    hotkeysForm->addRow(QStringLiteral("Save replay"), hkSaveReplay_);
     hotkeysForm->addRow(QStringLiteral("Scene 1"), hkScene1_);
     hotkeysForm->addRow(QStringLiteral("Scene 2"), hkScene2_);
     hotkeysForm->addRow(QStringLiteral("Scene 3"), hkScene3_);
@@ -168,6 +269,20 @@ SettingsDialog::SettingsDialog(QWidget* parent)
     loadUi();
 }
 
+void SettingsDialog::syncStreamFieldsFromService() {
+    const QString id = streamServiceCombo_->currentData().toString();
+    if (const auto* preset = findStreamService(id.toStdString())) {
+        if (!preset->serverUrl.empty()) {
+            streamServerEdit_->setText(QString::fromStdString(preset->serverUrl));
+        }
+        if (id != QStringLiteral("Custom")) {
+            rtmpEdit_->setText(QString::fromStdString(
+                combineRtmpUrl(streamServerEdit_->text().trimmed().toStdString(),
+                               streamKeyEdit_->text().trimmed().toStdString())));
+        }
+    }
+}
+
 void SettingsDialog::loadUi() {
     widthSpin_->setValue(original_.canvasWidth);
     heightSpin_->setValue(original_.canvasHeight);
@@ -176,6 +291,28 @@ void SettingsDialog::loadUi() {
     collectionNameEdit_->setText(
         QString::fromStdString(SceneManager::instance().collection().name));
     monitorEnableCheck_->setChecked(original_.audioMonitoringEnabled);
+
+    const int encIdx = encoderCombo_->findData(QString::fromStdString(original_.videoEncoder));
+    encoderCombo_->setCurrentIndex(encIdx >= 0 ? encIdx : 0);
+    const int presetIdx =
+        encoderPresetCombo_->findData(QString::fromStdString(original_.encoderPreset));
+    encoderPresetCombo_->setCurrentIndex(presetIdx >= 0 ? presetIdx : 0);
+    videoBitrateSpin_->setValue(original_.videoBitrateKbps);
+    audioBitrateSpin_->setValue(original_.audioBitrateKbps);
+    const int fmtIdx =
+        recordingFormatCombo_->findData(QString::fromStdString(original_.recordingFormat));
+    recordingFormatCombo_->setCurrentIndex(fmtIdx >= 0 ? fmtIdx : 0);
+    recordingDirEdit_->setText(QString::fromStdString(original_.recordingDirectory));
+    replayEnableCheck_->setChecked(original_.replayBufferEnabled);
+    replaySecondsSpin_->setValue(original_.replayBufferSeconds);
+
+    const int svcIdx =
+        streamServiceCombo_->findData(QString::fromStdString(original_.streamService));
+    streamServiceCombo_->blockSignals(true);
+    streamServiceCombo_->setCurrentIndex(svcIdx >= 0 ? svcIdx : 0);
+    streamServiceCombo_->blockSignals(false);
+    streamServerEdit_->setText(QString::fromStdString(original_.streamServer));
+    streamKeyEdit_->setText(QString::fromStdString(original_.streamKey));
 }
 
 AppSettingsData SettingsDialog::collectDraft() const {
@@ -188,9 +325,26 @@ AppSettingsData SettingsDialog::collectDraft() const {
     draft.audioMonitoringEnabled = monitorEnableCheck_->isChecked();
     draft.monitoringDeviceId = monitorDeviceCombo_->currentData().toString().toStdString();
     draft.micDeviceId = micDeviceCombo_->currentData().toString().toStdString();
+
+    draft.videoEncoder = encoderCombo_->currentData().toString().toStdString();
+    draft.encoderPreset = encoderPresetCombo_->currentData().toString().toStdString();
+    draft.videoBitrateKbps = videoBitrateSpin_->value();
+    draft.audioBitrateKbps = audioBitrateSpin_->value();
+    draft.recordingFormat = recordingFormatCombo_->currentData().toString().toStdString();
+    draft.recordingDirectory = recordingDirEdit_->text().trimmed().toStdString();
+    draft.replayBufferEnabled = replayEnableCheck_->isChecked();
+    draft.replayBufferSeconds = replaySecondsSpin_->value();
+    draft.streamService = streamServiceCombo_->currentData().toString().toStdString();
+    draft.streamServer = streamServerEdit_->text().trimmed().toStdString();
+    draft.streamKey = streamKeyEdit_->text().trimmed().toStdString();
+    if (draft.streamService != "Custom") {
+        draft.defaultRtmpUrl = combineRtmpUrl(draft.streamServer, draft.streamKey);
+    }
+
     draft.hotkeys.transition = seqToString(hkTransition_).toStdString();
     draft.hotkeys.startStopStream = seqToString(hkStream_).toStdString();
     draft.hotkeys.record = seqToString(hkRecord_).toStdString();
+    draft.hotkeys.saveReplay = seqToString(hkSaveReplay_).toStdString();
     draft.hotkeys.scene1 = seqToString(hkScene1_).toStdString();
     draft.hotkeys.scene2 = seqToString(hkScene2_).toStdString();
     draft.hotkeys.scene3 = seqToString(hkScene3_).toStdString();

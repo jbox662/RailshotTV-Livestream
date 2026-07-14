@@ -422,6 +422,7 @@ void MainWindow::setupMenuBar() {
     auto* fileMenu = bar->addMenu(QStringLiteral("&File"));
     fileMenu->addAction(QStringLiteral("&Settings…"), this, &MainWindow::onOpenSettings,
                         QKeySequence(QStringLiteral("Ctrl+,")));
+    fileMenu->addAction(QStringLiteral("&Remux Recording…"), this, &MainWindow::onRemuxRecording);
     fileMenu->addSeparator();
     fileMenu->addAction(QStringLiteral("E&xit"), this, &QWidget::close, QKeySequence::Quit);
 
@@ -1393,9 +1394,9 @@ void MainWindow::onOpenSettings() {
             SceneManager::instance().currentCollectionId(), rename.toStdString());
     }
 
-    if (dlg.videoSettingsChanged() && controller_->isStreaming()) {
+    if (dlg.videoSettingsChanged() && (controller_->isStreaming() || controller_->isEncoding())) {
         QMessageBox::information(this, "Settings",
-                                 "Stop streaming before applying canvas size or FPS changes.");
+                                 "Stop streaming/recording/replay before applying canvas size or FPS changes.");
         AppSettingsData keep = AppSettings::instance().data();
         keep.defaultRtmpUrl = settings.defaultRtmpUrl;
         keep.hotkeys = settings.hotkeys;
@@ -1404,6 +1405,18 @@ void MainWindow::onOpenSettings() {
         keep.audioMonitoringEnabled = settings.audioMonitoringEnabled;
         keep.monitoringDeviceId = settings.monitoringDeviceId;
         keep.micDeviceId = settings.micDeviceId;
+        keep.videoEncoder = settings.videoEncoder;
+        keep.encoderPreset = settings.encoderPreset;
+        keep.videoBitrateKbps = settings.videoBitrateKbps;
+        keep.audioBitrateKbps = settings.audioBitrateKbps;
+        keep.recordingFormat = settings.recordingFormat;
+        keep.recordingDirectory = settings.recordingDirectory;
+        keep.recordingBitrateKbps = settings.recordingBitrateKbps;
+        keep.replayBufferEnabled = settings.replayBufferEnabled;
+        keep.replayBufferSeconds = settings.replayBufferSeconds;
+        keep.streamService = settings.streamService;
+        keep.streamServer = settings.streamServer;
+        keep.streamKey = settings.streamKey;
         keep.micVolume = settings.micVolume;
         keep.micMuted = settings.micMuted;
         keep.micSyncDelayMs = settings.micSyncDelayMs;
@@ -1450,6 +1463,7 @@ void MainWindow::bindHotkeys() {
     add(hk.transition, [this]() { onTransition(); });
     add(hk.startStopStream, [this]() { onStartStop(); });
     add(hk.record, [this]() { onRecord(); });
+    add(hk.saveReplay, [this]() { onSaveReplay(); });
     add(hk.scene1, [this]() {
         RemoteCommandBus::instance().execute(QStringLiteral("selectSceneByIndex"),
                                              QJsonObject{{QStringLiteral("index"), 0}});
@@ -1719,33 +1733,80 @@ void MainWindow::onRecord() {
     if (controller_->isRecording()) {
         controller_->stopRecording();
         recordBtn_->setText("Start Recording");
-        return;
-    }
-
-    if (!controller_->isStreaming()) {
-        QMessageBox::information(this, "Recording",
-                                 "Start streaming first, then record the program mix.");
+        syncControlsFromController();
         return;
     }
 
     if (!controller_->startRecording()) {
         QMessageBox::critical(this, "Recording Failed",
-                              "Could not start program recording.");
+                              "Could not start program recording. Add at least one source to the active scene.");
         return;
     }
 
     recordBtn_->setText("Stop Recording");
+    syncControlsFromController();
+}
+
+void MainWindow::onSaveReplay() {
+    if (!controller_) {
+        return;
+    }
+    if (!controller_->isReplayBufferActive()) {
+        if (!controller_->startReplayBuffer()) {
+            QMessageBox::warning(this, QStringLiteral("Replay Buffer"),
+                                 QStringLiteral("Could not start the replay buffer. "
+                                                "Add a source and try again."));
+            return;
+        }
+        statusBar()->showMessage(
+            QStringLiteral("Replay buffer started — press Save Replay again after a few seconds."),
+            4000);
+        return;
+    }
+    if (!controller_->saveReplayBuffer()) {
+        QMessageBox::warning(this, QStringLiteral("Save Replay"),
+                             QStringLiteral("Replay buffer is empty or save failed."));
+        return;
+    }
+    const auto path = QString::fromStdString(controller_->stats().lastReplayPath);
+    statusBar()->showMessage(QStringLiteral("Replay saved: %1").arg(path), 6000);
+}
+
+void MainWindow::onRemuxRecording() {
+    if (!controller_) {
+        return;
+    }
+    const QString input = QFileDialog::getOpenFileName(
+        this, QStringLiteral("Remux recording"), QString(),
+        QStringLiteral("Media (*.mp4 *.mkv *.mov *.flv);;All files (*.*)"));
+    if (input.isEmpty()) {
+        return;
+    }
+    QString suggested = input;
+    if (suggested.endsWith(QStringLiteral(".mkv"), Qt::CaseInsensitive)) {
+        suggested.replace(suggested.size() - 3, 3, QStringLiteral("mp4"));
+    } else {
+        suggested += QStringLiteral(".mp4");
+    }
+    const QString output = QFileDialog::getSaveFileName(
+        this, QStringLiteral("Remux output"), suggested,
+        QStringLiteral("MP4 (*.mp4);;MKV (*.mkv);;MOV (*.mov)"));
+    if (output.isEmpty()) {
+        return;
+    }
+    if (!controller_->remuxRecording(input.toStdString(), output.toStdString())) {
+        QMessageBox::critical(this, QStringLiteral("Remux Failed"),
+                              QStringLiteral("Could not remux the selected file."));
+        return;
+    }
+    QMessageBox::information(this, QStringLiteral("Remux"),
+                             QStringLiteral("Wrote:\n%1").arg(output));
 }
 
 void MainWindow::onStartStop() {
     if (controller_->isStreaming()) {
         controller_->stopStream();
-        startStopBtn_->setText("Start Streaming");
-        startStopBtn_->setObjectName("rsControlButton");
-        startStopBtn_->style()->unpolish(startStopBtn_);
-        startStopBtn_->style()->polish(startStopBtn_);
-        rtmpUrlEdit_->setEnabled(true);
-        recordBtn_->setText("Start Recording");
+        syncControlsFromController();
         return;
     }
 
@@ -1767,11 +1828,7 @@ void MainWindow::onStartStop() {
         return;
     }
 
-    startStopBtn_->setText("Stop Streaming");
-    startStopBtn_->setObjectName("rsControlButtonLive");
-    startStopBtn_->style()->unpolish(startStopBtn_);
-    startStopBtn_->style()->polish(startStopBtn_);
-    rtmpUrlEdit_->setEnabled(false);
+    syncControlsFromController();
 }
 
 void MainWindow::updateStats() {
@@ -1785,7 +1842,7 @@ void MainWindow::updateStats() {
         const int secs = seconds % 60;
 
         status = QString("LIVE | Encoder: %1 | FPS: %2 | Frames: %3 | Dropped: %4 (%5%) | "
-                         "Connected: %6 | Bytes: %7 | Reconnects: %8 | Duration: %9:%10%11")
+                         "Connected: %6 | Bytes: %7 | Reconnects: %8 | Duration: %9:%10%11%12")
                      .arg(QString::fromStdString(s.encoderName))
                      .arg(s.encodedFps, 0, 'f', 1)
                      .arg(s.totalFrames)
@@ -1796,7 +1853,13 @@ void MainWindow::updateStats() {
                      .arg(s.reconnectCount)
                      .arg(mins, 2, 10, QChar('0'))
                      .arg(secs, 2, 10, QChar('0'))
-                     .arg(s.isRecording ? " | REC" : "");
+                     .arg(s.isRecording ? " | REC" : "")
+                     .arg(s.isReplayBufferActive ? " | REPLAY" : "");
+    } else if (s.isRecording || s.isReplayBufferActive) {
+        status = QString("Encoding (%1)%2%3")
+                     .arg(QString::fromStdString(s.encoderName.empty() ? "…" : s.encoderName))
+                     .arg(s.isRecording ? " | REC" : "")
+                     .arg(s.isReplayBufferActive ? " | REPLAY" : "");
     } else {
         status = "Ready — configure scenes and sources, enter RTMP URL, then Start Streaming";
     }

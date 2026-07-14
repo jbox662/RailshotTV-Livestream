@@ -3,13 +3,11 @@
 #include "core/AppSettings.h"
 
 #include <QDialog>
-#include <QHash>
 #include <QString>
 
 class QSpinBox;
 class QLineEdit;
 class QKeySequenceEdit;
-class QTabWidget;
 class QComboBox;
 class QCheckBox;
 
@@ -26,6 +24,7 @@ public:
 
 private:
     void loadUi();
+    void syncStreamFieldsFromService();
     AppSettingsData collectDraft() const;
 
     AppSettingsData original_;
@@ -42,9 +41,24 @@ private:
     QComboBox* monitorDeviceCombo_ = nullptr;
     QComboBox* micDeviceCombo_ = nullptr;
 
+    QComboBox* encoderCombo_ = nullptr;
+    QComboBox* encoderPresetCombo_ = nullptr;
+    QSpinBox* videoBitrateSpin_ = nullptr;
+    QSpinBox* audioBitrateSpin_ = nullptr;
+
+    QComboBox* recordingFormatCombo_ = nullptr;
+    QLineEdit* recordingDirEdit_ = nullptr;
+    QCheckBox* replayEnableCheck_ = nullptr;
+    QSpinBox* replaySecondsSpin_ = nullptr;
+
+    QComboBox* streamServiceCombo_ = nullptr;
+    QLineEdit* streamServerEdit_ = nullptr;
+    QLineEdit* streamKeyEdit_ = nullptr;
+
     QKeySequenceEdit* hkTransition_ = nullptr;
     QKeySequenceEdit* hkStream_ = nullptr;
     QKeySequenceEdit* hkRecord_ = nullptr;
+    QKeySequenceEdit* hkSaveReplay_ = nullptr;
     QKeySequenceEdit* hkScene1_ = nullptr;
     QKeySequenceEdit* hkScene2_ = nullptr;
     QKeySequenceEdit* hkScene3_ = nullptr;

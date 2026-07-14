@@ -40,13 +40,13 @@
 #   [x] Window Capture via WGC (BitBlt fallback)
 #   [x] Application Audio Capture (process loopback)
 #
-# Phase F5 — Output / encoder — NEXT
-#   [ ] NVENC / QSV / x264 settings UI
-#   [ ] Recording formats / quality
-#   [ ] Replay buffer + remux
-#   [ ] Stream service presets (rtmp-services)
+# Phase F5 — Output / encoder — DONE
+#   [x] NVENC / QSV / x264 settings UI
+#   [x] Recording formats / quality
+#   [x] Replay buffer + remux
+#   [x] Stream service presets (rtmp-services)
 #
-# Phase F6 — Transitions catalog
+# Phase F6 — Transitions catalog — NEXT
 #   [ ] Wipe / stinger / luma / swipe (OBS transition set)
 #
 # Phase F7 — Remote protocol

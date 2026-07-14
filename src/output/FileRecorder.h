@@ -23,11 +23,13 @@ public:
     FileRecorder(const FileRecorder&) = delete;
     FileRecorder& operator=(const FileRecorder&) = delete;
 
-    static std::string generateFilename(const std::string& prefix = "RailShot");
+    static std::string generateFilename(const std::string& prefix = "RailShot",
+                                        const std::string& extension = "mp4");
 
     bool open(const std::string& filePath,
               AVCodecContext* videoCtx,
-              AVCodecContext* audioCtx = nullptr);
+              AVCodecContext* audioCtx = nullptr,
+              const std::string& formatName = {});
     void close();
 
     bool start(ThreadSafeQueue<EncodedPacket>* input);

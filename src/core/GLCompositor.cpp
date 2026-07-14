@@ -401,6 +401,10 @@ void GLCompositor::setPreviewQueues(ThreadSafeQueue<VideoFrame>* programPreviewQ
     studioPreviewQueue_ = studioPreviewQueue;
 }
 
+void GLCompositor::setOutputQueue(ThreadSafeQueue<VideoFrame>* outputQueue) {
+    outputQueue_ = outputQueue;
+}
+
 void GLCompositor::setVirtualCamOutput(VirtualCamOutput* output) {
     virtualCamOutput_ = output;
 }

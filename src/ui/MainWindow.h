@@ -47,6 +47,8 @@ private slots:
     void startPreviewDeferred();
     void onStartStop();
     void onRecord();
+    void onSaveReplay();
+    void onRemuxRecording();
     void onVirtualCamera();
     void onCollectionComboChanged(int index);
     void onNewCollection();

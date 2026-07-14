@@ -5,6 +5,7 @@
 #include "capture/BrowserSource.h"
 #include "core/AppSettings.h"
 #include "core/Logger.h"
+#include "output/Remux.h"
 
 #include <QStandardPaths>
 
@@ -12,22 +13,12 @@
 
 namespace railshot {
 
-namespace {
-
-std::string programRecordingsDir() {
-    const QString dir = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation)
-        + "/RailShot/Recordings";
-    std::filesystem::create_directories(dir.toStdString());
-    return dir.toStdString();
-}
-
-} // namespace
-
 StreamController::StreamController()
     : compositor_(std::make_unique<GLCompositor>())
     , encoder_(std::make_unique<FFmpegEncoder>())
     , rtmpOutput_(std::make_unique<RtmpOutput>())
     , fileRecorder_(std::make_unique<FileRecorder>())
+    , replayBuffer_(std::make_unique<ReplayBuffer>())
     , virtualCam_(std::make_unique<VirtualCamOutput>())
     , audioMonitor_(std::make_unique<WasapiAudioMonitor>()) {
     SceneManager::instance().setOnScenesChanged([this]() { onSceneCollectionChanged(); });
@@ -35,8 +26,29 @@ StreamController::StreamController()
 
 StreamController::~StreamController() {
     stopVirtualCamera();
+    stopReplayBuffer();
+    stopRecording();
     stopStream();
+    stopEncodePipeline();
     stopPreviewEngine();
+}
+
+std::string StreamController::recordingsDirectory() const {
+    const AppSettingsData settings = AppSettings::instance().data();
+    std::string dir = settings.recordingDirectory;
+    if (dir.empty()) {
+        dir = (QStandardPaths::writableLocation(QStandardPaths::MoviesLocation)
+               + "/RailShot/Recordings")
+                  .toStdString();
+    }
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    return dir;
+}
+
+std::string StreamController::makeRecordingPath(const std::string& prefix) const {
+    const std::string ext = AppSettings::instance().data().recordingFormat;
+    return recordingsDirectory() + "/" + FileRecorder::generateFilename(prefix, ext);
 }
 
 std::vector<CaptureDevice> StreamController::enumerateVideoDevices() {
@@ -120,8 +132,8 @@ void StreamController::setStudioModeEnabled(bool enabled) {
 }
 
 void StreamController::applyVideoSettings() {
-    if (streaming_.load()) {
-        Logger::warn("StreamController: cannot apply video settings while streaming");
+    if (encoding_.load() || streaming_.load()) {
+        Logger::warn("StreamController: cannot apply video settings while encoding");
         return;
     }
     if (isVirtualCameraActive()) {
@@ -189,7 +201,7 @@ bool StreamController::isVirtualCameraActive() const {
 }
 
 void StreamController::restartPreviewEngine() {
-    if (streaming_.load()) {
+    if (encoding_.load() || streaming_.load()) {
         syncProvidersForCompositor();
         return;
     }
@@ -244,10 +256,10 @@ void StreamController::stopPreviewEngine() {
     if (isVirtualCameraActive()) {
         stopVirtualCamera();
     }
-    if (!previewEngineRunning_.load() && !compositor_->isRunning()) {
+    if (encoding_.load() || streaming_.load()) {
         return;
     }
-    if (streaming_.load()) {
+    if (!previewEngineRunning_.load() && !compositor_->isRunning()) {
         return;
     }
 
@@ -287,16 +299,106 @@ void StreamController::transitionPreviewToProgram() {
     }
 }
 
-bool StreamController::startRecording() {
-    if (recording_.load() || !streaming_.load()) {
+bool StreamController::ensureEncodePipeline() {
+    if (encoding_.load()) {
+        return true;
+    }
+
+    auto active = SceneManager::instance().activeSceneSnapshot();
+    if (!active.has_value() || active->sources.empty()) {
+        Logger::error("StreamController: active scene has no sources");
         return false;
     }
 
-    recordingPath_ = programRecordingsDir() + "/" + FileRecorder::generateFilename();
+    compositedVideoQueue_.reset();
+    rawAudioQueue_.reset();
+    encoderOutputQueue_.reset();
+    rtmpQueue_.reset();
+    recordQueue_.reset();
+
+    if (!encoder_->initialize()) {
+        Logger::error("StreamController: encoder init failed");
+        encoder_->shutdown();
+        return false;
+    }
+
+    syncProvidersForCompositor();
+    sourceRegistry_.startMicCapture();
+
+    ensurePreviewEngine();
+    compositor_->setStudioModeEnabled(studioModeEnabled_.load());
+    compositor_->setOutputQueue(&compositedVideoQueue_);
+    compositor_->setPreviewQueues(&programPreviewQueue_,
+                                  studioModeEnabled_.load() ? &studioPreviewQueue_ : nullptr);
+
+    audioStopRequested_ = false;
+    ensureMeterThread();
+
+    if (!encoder_->start(&compositedVideoQueue_, &rawAudioQueue_, &encoderOutputQueue_)) {
+        Logger::error("StreamController: failed to start encoder");
+        compositor_->setOutputQueue(nullptr);
+        encoder_->shutdown();
+        return false;
+    }
+
+    dispatchStopRequested_ = false;
+    dispatchThread_ = std::make_unique<std::thread>(&StreamController::packetDispatchThreadFunc, this);
+
+    encoding_ = true;
+    streamStartTime_ = std::chrono::steady_clock::now();
+    Logger::info("StreamController: encode pipeline started (" + encoder_->videoCodecName() + ")");
+    return true;
+}
+
+void StreamController::stopEncodePipeline() {
+    if (!encoding_.load()) {
+        return;
+    }
+
+    encoding_ = false;
+    dispatchStopRequested_ = true;
+    encoderOutputQueue_.shutdown();
+    if (dispatchThread_ && dispatchThread_->joinable()) {
+        dispatchThread_->join();
+    }
+    dispatchThread_.reset();
+
+    encoder_->stop();
+    encoder_->shutdown();
+    compositor_->setOutputQueue(nullptr);
+
+    compositedVideoQueue_.shutdown();
+    rawAudioQueue_.shutdown();
+    encoderOutputQueue_.shutdown();
+    rtmpQueue_.shutdown();
+    recordQueue_.shutdown();
+
+    Logger::info("StreamController: encode pipeline stopped");
+}
+
+void StreamController::maybeStopEncodePipeline() {
+    if (streaming_.load() || recording_.load() || replayActive_.load()) {
+        return;
+    }
+    stopEncodePipeline();
+}
+
+bool StreamController::startRecording() {
+    if (recording_.load()) {
+        return false;
+    }
+    if (!ensureEncodePipeline()) {
+        return false;
+    }
+
+    const AppSettingsData settings = AppSettings::instance().data();
+    recordingPath_ = makeRecordingPath("RailShot");
     if (!fileRecorder_->open(recordingPath_,
                              encoder_->videoCodecContext(),
-                             encoder_->audioCodecContext())) {
+                             encoder_->audioCodecContext(),
+                             settings.recordingFormat)) {
         recordingPath_.clear();
+        maybeStopEncodePipeline();
         return false;
     }
 
@@ -304,6 +406,7 @@ bool StreamController::startRecording() {
     if (!fileRecorder_->start(&recordQueue_)) {
         fileRecorder_->close();
         recordingPath_.clear();
+        maybeStopEncodePipeline();
         return false;
     }
 
@@ -322,6 +425,57 @@ void StreamController::stopRecording() {
     fileRecorder_->stop();
     fileRecorder_->close();
     Logger::info("StreamController: program recording stopped");
+    maybeStopEncodePipeline();
+}
+
+bool StreamController::startReplayBuffer() {
+    if (replayActive_.load()) {
+        return true;
+    }
+    if (!ensureEncodePipeline()) {
+        return false;
+    }
+
+    const AppSettingsData settings = AppSettings::instance().data();
+    replayBuffer_->setSeconds(settings.replayBufferSeconds);
+    replayBuffer_->clear();
+    replayActive_ = true;
+    Logger::info("StreamController: replay buffer active ("
+                 + std::to_string(settings.replayBufferSeconds) + "s)");
+    return true;
+}
+
+void StreamController::stopReplayBuffer() {
+    if (!replayActive_.load()) {
+        return;
+    }
+    replayActive_ = false;
+    replayBuffer_->clear();
+    Logger::info("StreamController: replay buffer stopped");
+    maybeStopEncodePipeline();
+}
+
+bool StreamController::saveReplayBuffer() {
+    if (!replayActive_.load() || !encoding_.load()) {
+        return false;
+    }
+    if (replayBuffer_->empty()) {
+        Logger::warn("StreamController: replay buffer empty");
+        return false;
+    }
+
+    lastReplayPath_ = makeRecordingPath("Replay");
+    if (!replayBuffer_->save(lastReplayPath_,
+                             encoder_->videoCodecContext(),
+                             encoder_->audioCodecContext())) {
+        lastReplayPath_.clear();
+        return false;
+    }
+    return true;
+}
+
+bool StreamController::remuxRecording(const std::string& inputPath, const std::string& outputPath) {
+    return remuxFile(inputPath, outputPath);
 }
 
 void StreamController::packetDispatchThreadFunc() {
@@ -331,9 +485,14 @@ void StreamController::packetDispatchThreadFunc() {
             continue;
         }
 
-        rtmpQueue_.push(*packet);
+        if (streaming_.load()) {
+            rtmpQueue_.push(*packet);
+        }
         if (recording_.load()) {
             recordQueue_.push(*packet);
+        }
+        if (replayActive_.load() && replayBuffer_) {
+            replayBuffer_->push(*packet);
         }
     }
 }
@@ -343,96 +502,37 @@ bool StreamController::startStream() {
         return false;
     }
 
-    auto active = SceneManager::instance().activeSceneSnapshot();
-    if (!active.has_value() || active->sources.empty()) {
-        Logger::error("StreamController: active scene has no sources");
-        return false;
-    }
-
     if (rtmpUrl_.empty()) {
         Logger::error("StreamController: no RTMP URL configured");
         return false;
     }
 
-    compositedVideoQueue_.reset();
-    rawAudioQueue_.reset();
-    encoderOutputQueue_.reset();
-    rtmpQueue_.reset();
-    recordQueue_.reset();
-    programPreviewQueue_.reset();
-    studioPreviewQueue_.reset();
-
-    if (!encoder_->initialize()) {
-        Logger::error("StreamController: encoder init failed");
-        encoder_->shutdown();
+    if (!ensureEncodePipeline()) {
         return false;
     }
 
     if (!rtmpOutput_->open(rtmpUrl_)) {
         Logger::error("StreamController: RTMP output init failed");
-        encoder_->shutdown();
+        maybeStopEncodePipeline();
         return false;
     }
 
-    syncProvidersForCompositor();
-    sourceRegistry_.startMicCapture();
-
-    const bool compositorAlreadyRunning = compositor_->isRunning();
-    compositor_->setStudioModeEnabled(studioModeEnabled_.load());
-    if (!compositorAlreadyRunning) {
-        if (!compositor_->start(&sourceRegistry_,
-                                &compositedVideoQueue_,
-                                &programPreviewQueue_,
-                                studioModeEnabled_.load() ? &studioPreviewQueue_ : nullptr)) {
-            Logger::error("StreamController: failed to start compositor");
-            sourceRegistry_.stopAll();
-            encoder_->shutdown();
-            return false;
-        }
-        previewEngineRunning_ = true;
-    }
-
-    audioStopRequested_ = false;
-    ensureMeterThread();
-
-    if (!encoder_->start(&compositedVideoQueue_, &rawAudioQueue_, &encoderOutputQueue_)) {
-        Logger::error("StreamController: failed to start encoder");
-        if (!compositorAlreadyRunning) {
-            stopMeterThread();
-            compositor_->stop();
-            previewEngineRunning_ = false;
-        }
-        sourceRegistry_.stopAll();
-        encoder_->shutdown();
-        return false;
-    }
-
-    dispatchStopRequested_ = false;
-    dispatchThread_ = std::make_unique<std::thread>(&StreamController::packetDispatchThreadFunc, this);
-
+    rtmpQueue_.reset();
     if (!rtmpOutput_->start(&rtmpQueue_,
                             encoder_->videoCodecContext(),
                             encoder_->audioCodecContext())) {
         Logger::error("StreamController: failed to start RTMP output");
-        dispatchStopRequested_ = true;
-        if (dispatchThread_->joinable()) {
-            dispatchThread_->join();
-        }
-        dispatchThread_.reset();
-        encoder_->stop();
-        if (!compositorAlreadyRunning) {
-            stopMeterThread();
-            compositor_->stop();
-            previewEngineRunning_ = false;
-        }
-        sourceRegistry_.stopAll();
-        encoder_->shutdown();
+        maybeStopEncodePipeline();
         return false;
     }
 
     streaming_ = true;
     streamStartTime_ = std::chrono::steady_clock::now();
-    Logger::info("StreamController: pipeline started with scene compositor");
+    Logger::info("StreamController: streaming started");
+
+    if (AppSettings::instance().data().replayBufferEnabled && !replayActive_.load()) {
+        startReplayBuffer();
+    }
     return true;
 }
 
@@ -469,7 +569,7 @@ void StreamController::audioThreadFunc() {
             if (audioMonitor_ && audioMonitor_->isEnabled()) {
                 audioMonitor_->write(*mixed);
             }
-            if (streaming_.load()) {
+            if (encoding_.load()) {
                 rawAudioQueue_.push(std::move(*mixed));
             }
         }
@@ -484,61 +584,31 @@ void StreamController::stopStream() {
     }
 
     streaming_ = false;
-    recording_ = false;
-
-    dispatchStopRequested_ = true;
-    encoderOutputQueue_.shutdown();
-    if (dispatchThread_ && dispatchThread_->joinable()) {
-        dispatchThread_->join();
-    }
-    dispatchThread_.reset();
-
-    audioStopRequested_ = true;
-    if (audioThread_ && audioThread_->joinable()) {
-        audioThread_->join();
-    }
-    audioThread_.reset();
-    audioStopRequested_ = false;
-
     rtmpOutput_->stop();
-    fileRecorder_->stop();
-    fileRecorder_->close();
-    encoder_->stop();
-    compositor_->stop();
-    sourceRegistry_.stopAll();
-    encoder_->shutdown();
-
-    compositedVideoQueue_.shutdown();
-    rawAudioQueue_.shutdown();
-    encoderOutputQueue_.shutdown();
     rtmpQueue_.shutdown();
-    recordQueue_.shutdown();
-    programPreviewQueue_.shutdown();
-    studioPreviewQueue_.shutdown();
-
-    previewEngineRunning_ = false;
-    recordingPath_.clear();
-
-    Logger::info("StreamController: pipeline stopped");
+    Logger::info("StreamController: streaming stopped");
+    maybeStopEncodePipeline();
 }
 
 StreamStats StreamController::stats() const {
     StreamStats s;
     s.isStreaming = streaming_.load();
     s.isRecording = recording_.load();
+    s.isReplayBufferActive = replayActive_.load();
     s.isConnected = rtmpOutput_->isConnected();
     s.encoderName = encoder_->videoCodecName();
     s.droppedFrames = encoder_->droppedFrames();
     s.bytesSent = rtmpOutput_->bytesSent();
     s.bytesRecorded = fileRecorder_->bytesWritten();
     s.recordingPath = recordingPath_;
+    s.lastReplayPath = lastReplayPath_;
     s.reconnectCount = rtmpOutput_->reconnectCount();
     s.streamStartTime = streamStartTime_;
 
     const uint64_t encoded = encoder_->encodedFrames();
     s.totalFrames = encoded;
 
-    if (streaming_.load()) {
+    if (encoding_.load()) {
         const auto elapsed = std::chrono::steady_clock::now() - streamStartTime_;
         const double seconds = std::chrono::duration_cast<std::chrono::duration<double>>(elapsed).count();
         if (seconds > 0) {

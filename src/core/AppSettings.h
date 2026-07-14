@@ -19,6 +19,7 @@ struct HotkeyBindings {
     std::string scoreP1Minus = "[";
     std::string scoreP2Plus = "'";
     std::string scoreP2Minus = ";";
+    std::string saveReplay = "F12";
 };
 
 struct AppSettingsData {
@@ -37,6 +38,21 @@ struct AppSettingsData {
     int micVolume = 100;
     bool micMuted = false;
     int micSyncDelayMs = 0;
+
+    // Output / encoder (Phase F5)
+    // videoEncoder: auto | h264_nvenc | h264_qsv | h264_amf | libx264
+    std::string videoEncoder = "auto";
+    std::string encoderPreset = "default"; // codec-specific; "default" maps per encoder
+    int videoBitrateKbps = 6000;
+    int audioBitrateKbps = 160;
+    std::string recordingFormat = "mp4"; // mp4 | mkv | mov
+    std::string recordingDirectory;      // empty = Movies/RailShot/Recordings
+    int recordingBitrateKbps = 0;        // 0 = same as stream bitrate
+    bool replayBufferEnabled = false;
+    int replayBufferSeconds = 30;
+    std::string streamService = "Custom"; // Custom | Twitch | YouTube | Kick | Facebook
+    std::string streamServer;
+    std::string streamKey;
 };
 
 class AppSettings {

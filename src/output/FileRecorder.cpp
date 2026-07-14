@@ -17,21 +17,28 @@ FileRecorder::~FileRecorder() {
     close();
 }
 
-std::string FileRecorder::generateFilename(const std::string& prefix) {
+std::string FileRecorder::generateFilename(const std::string& prefix,
+                                           const std::string& extension) {
     const auto now = std::chrono::system_clock::now();
     const std::time_t t = std::chrono::system_clock::to_time_t(now);
     std::tm local{};
     localtime_s(&local, &t);
 
+    std::string ext = extension.empty() ? "mp4" : extension;
+    if (!ext.empty() && ext.front() == '.') {
+        ext.erase(ext.begin());
+    }
+
     std::ostringstream oss;
     oss << prefix << '_'
-        << std::put_time(&local, "%Y-%m-%d_%H-%M-%S") << ".mp4";
+        << std::put_time(&local, "%Y-%m-%d_%H-%M-%S") << '.' << ext;
     return oss.str();
 }
 
 bool FileRecorder::open(const std::string& filePath,
                         AVCodecContext* videoCtx,
-                        AVCodecContext* audioCtx) {
+                        AVCodecContext* audioCtx,
+                        const std::string& formatName) {
     close();
     if (!videoCtx) {
         return false;
@@ -47,7 +54,8 @@ bool FileRecorder::open(const std::string& filePath,
         std::filesystem::create_directories(path.parent_path(), ec);
     }
 
-    int ret = avformat_alloc_output_context2(&formatCtx_, nullptr, nullptr, filePath_.c_str());
+    const char* fmt = formatName.empty() ? nullptr : formatName.c_str();
+    int ret = avformat_alloc_output_context2(&formatCtx_, nullptr, fmt, filePath_.c_str());
     if (ret < 0 || !formatCtx_) {
         Logger::error("FileRecorder: failed to create output context");
         return false;
@@ -138,7 +146,7 @@ void FileRecorder::stop() {
     }
     recorderThread_.reset();
 
-    if (formatCtx_ && running_.load()) {
+    if (formatCtx_) {
         av_write_trailer(formatCtx_);
         if (formatCtx_->pb) {
             avio_closep(&formatCtx_->pb);
