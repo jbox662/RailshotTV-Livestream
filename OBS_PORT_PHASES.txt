@@ -46,10 +46,10 @@
 #   [x] Replay buffer + remux
 #   [x] Stream service presets (rtmp-services)
 #
-# Phase F6 — Transitions catalog — NEXT
-#   [ ] Wipe / stinger / luma / swipe (OBS transition set)
+# Phase F6 — Transitions catalog — DONE
+#   [x] Wipe / stinger / luma / swipe (OBS transition set)
 #
-# Phase F7 — Remote protocol
+# Phase F7 — Remote protocol — NEXT
 #   [ ] obs-websocket compatible protocol (auth + events + common requests)
 #
 # Phase F8 — Ship

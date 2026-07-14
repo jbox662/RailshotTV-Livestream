@@ -28,7 +28,11 @@ enum class TransitionType {
     Cut,
     Fade,
     Slide,
-    FadeToBlack
+    FadeToBlack,
+    Wipe,
+    Swipe,
+    Luma,
+    Stinger
 };
 
 enum class FilterType {

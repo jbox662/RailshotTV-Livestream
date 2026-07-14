@@ -472,7 +472,7 @@ void GLCompositor::cleanupGl() {
 }
 
 void GLCompositor::drawLayer(const VideoFrame& frame, const SourceTransform& transform, float alpha,
-                             float xOffset) {
+                             float xOffset, float yOffset) {
     if (!frame.isValid() || alpha <= 0.0f || frame.format == PixelFormat::RGBA32) {
         return;
     }
@@ -481,8 +481,8 @@ void GLCompositor::drawLayer(const VideoFrame& frame, const SourceTransform& tra
     const float outH = static_cast<float>(outputHeight_.load());
     const float left = ((transform.x + xOffset) / outW) * 2.0f - 1.0f;
     const float right = ((transform.x + xOffset + transform.width) / outW) * 2.0f - 1.0f;
-    const float top = 1.0f - (transform.y / outH) * 2.0f;
-    const float bottom = 1.0f - ((transform.y + transform.height) / outH) * 2.0f;
+    const float top = 1.0f - ((transform.y + yOffset) / outH) * 2.0f;
+    const float bottom = 1.0f - ((transform.y + yOffset + transform.height) / outH) * 2.0f;
 
     const float vertices[] = {
         left,  bottom, 0.0f, 1.0f,
@@ -566,7 +566,7 @@ std::optional<VideoFrame> GLCompositor::delayedFrame(const std::string& sourceId
     return ready;
 }
 
-void GLCompositor::renderScene(const Scene& scene, float alpha, float xOffset) {
+void GLCompositor::renderScene(const Scene& scene, float alpha, float xOffset, float yOffset) {
     if (!registry_ || alpha <= 0.0f) {
         return;
     }
@@ -599,8 +599,8 @@ void GLCompositor::renderScene(const Scene& scene, float alpha, float xOffset) {
         const float outH = static_cast<float>(outputHeight_.load());
         const float left = ((src.transform.x + xOffset) / outW) * 2.0f - 1.0f;
         const float right = ((src.transform.x + xOffset + src.transform.width) / outW) * 2.0f - 1.0f;
-        const float top = 1.0f - (src.transform.y / outH) * 2.0f;
-        const float bottom = 1.0f - ((src.transform.y + src.transform.height) / outH) * 2.0f;
+        const float top = 1.0f - ((src.transform.y + yOffset) / outH) * 2.0f;
+        const float bottom = 1.0f - ((src.transform.y + yOffset + src.transform.height) / outH) * 2.0f;
         const float vertices[] = {
             left,  bottom, 0.0f, 1.0f,
             right, bottom, 1.0f, 1.0f,
@@ -666,7 +666,7 @@ void GLCompositor::renderScene(const Scene& scene, float alpha, float xOffset) {
 }
 
 void GLCompositor::compositeRgbaOverlays(const Scene& scene, float alpha, QImage& canvas,
-                                         float xOffset) {
+                                         float xOffset, float yOffset, int clipLeft, int clipRight) {
     if (!registry_ || alpha <= 0.0f) {
         return;
     }
@@ -713,22 +713,32 @@ void GLCompositor::compositeRgbaOverlays(const Scene& scene, float alpha, QImage
             }
         }
         applyColorCorrection(overlay, filters);
-        const QRect target(static_cast<int>(src.transform.x + xOffset),
-                           static_cast<int>(src.transform.y),
-                           static_cast<int>(src.transform.width),
-                           static_cast<int>(src.transform.height));
+        QRect target(static_cast<int>(src.transform.x + xOffset),
+                     static_cast<int>(src.transform.y + yOffset),
+                     static_cast<int>(src.transform.width),
+                     static_cast<int>(src.transform.height));
+        if (clipLeft >= 0 || clipRight >= 0) {
+            const int left = clipLeft >= 0 ? clipLeft : 0;
+            const int right = clipRight >= 0 ? clipRight : canvas.width();
+            target = target.intersected(QRect(left, 0, std::max(0, right - left), canvas.height()));
+            if (target.isEmpty()) {
+                continue;
+            }
+        }
         blendImageOnto(canvas, overlay, target, opacity);
     }
 }
 
 void GLCompositor::readbackNv12(const Scene* sceneA, float alphaA, const Scene* sceneB,
-                                float alphaB, VideoFrame& output, float offsetA, float offsetB) {
+                                float alphaB, VideoFrame& output, float offsetA, float offsetB,
+                                float yOffsetA, float yOffsetB,
+                                int clipALeft, int clipARight, int clipBLeft, int clipBRight) {
     QImage canvas = readFboAsImage(context_->functions(), outputWidth_.load(), outputHeight_.load());
     if (sceneA && alphaA > 0.0f) {
-        compositeRgbaOverlays(*sceneA, alphaA, canvas, offsetA);
+        compositeRgbaOverlays(*sceneA, alphaA, canvas, offsetA, yOffsetA, clipALeft, clipARight);
     }
     if (sceneB && alphaB > 0.0f) {
-        compositeRgbaOverlays(*sceneB, alphaB, canvas, offsetB);
+        compositeRgbaOverlays(*sceneB, alphaB, canvas, offsetB, yOffsetB, clipBLeft, clipBRight);
     }
     argbImageToNv12(canvas, output);
 }
@@ -786,7 +796,8 @@ void GLCompositor::compositorThreadFunc() {
                 fbo_->bind();
                 auto* gl = context_->functions();
                 const int w = outputWidth_.load();
-                gl->glViewport(0, 0, w, outputHeight_.load());
+                const int h = outputHeight_.load();
+                gl->glViewport(0, 0, w, h);
                 gl->glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
                 gl->glClear(GL_COLOR_BUFFER_BIT);
 
@@ -803,6 +814,12 @@ void GLCompositor::compositorThreadFunc() {
                 float inAlpha = blend;
                 float outOffset = 0.0f;
                 float inOffset = 0.0f;
+                float outYOffset = 0.0f;
+                float inYOffset = 0.0f;
+                int outClipL = -1;
+                int outClipR = -1;
+                int inClipL = -1;
+                int inClipR = -1;
 
                 if (ttype == TransitionType::FadeToBlack) {
                     if (blend < 0.5f) {
@@ -817,16 +834,86 @@ void GLCompositor::compositorThreadFunc() {
                     inAlpha = 1.0f;
                     outOffset = -blend * static_cast<float>(w);
                     inOffset = (1.0f - blend) * static_cast<float>(w);
+                } else if (ttype == TransitionType::Swipe) {
+                    outAlpha = 1.0f;
+                    inAlpha = 1.0f;
+                    outYOffset = -blend * static_cast<float>(h);
+                    inYOffset = (1.0f - blend) * static_cast<float>(h);
+                } else if (ttype == TransitionType::Stinger) {
+                    if (blend < 0.35f) {
+                        outAlpha = 1.0f;
+                        inAlpha = 0.0f;
+                    } else if (blend < 0.65f) {
+                        outAlpha = 0.0f;
+                        inAlpha = 0.0f;
+                    } else {
+                        outAlpha = 0.0f;
+                        inAlpha = 1.0f;
+                    }
+                } else if (ttype == TransitionType::Wipe || ttype == TransitionType::Luma) {
+                    outAlpha = 1.0f;
+                    inAlpha = 1.0f;
+                    const float feather =
+                        ttype == TransitionType::Luma ? 0.12f : 0.0f;
+                    const float edge = blend;
+                    const int hardInEnd =
+                        static_cast<int>(std::clamp(edge - feather, 0.0f, 1.0f) * w);
+                    const int hardOutStart =
+                        static_cast<int>(std::clamp(edge + feather, 0.0f, 1.0f) * w);
+                    const int softStart = hardInEnd;
+                    const int softEnd = hardOutStart;
+
+                    gl->glEnable(GL_SCISSOR_TEST);
+                    if (outgoingScene.has_value() && hardOutStart < w) {
+                        gl->glScissor(hardOutStart, 0, w - hardOutStart, h);
+                        renderScene(*outgoingScene, 1.0f);
+                    }
+                    if (hardInEnd > 0) {
+                        gl->glScissor(0, 0, hardInEnd, h);
+                        renderScene(*program, 1.0f);
+                    }
+                    if (softEnd > softStart) {
+                        const float mid = (edge - (softStart / static_cast<float>(w)))
+                                          / std::max(0.0001f, (softEnd - softStart)
+                                                                  / static_cast<float>(w));
+                        const float softIn = std::clamp(1.0f - mid, 0.0f, 1.0f);
+                        const float softOut = std::clamp(mid, 0.0f, 1.0f);
+                        gl->glScissor(softStart, 0, softEnd - softStart, h);
+                        if (outgoingScene.has_value()) {
+                            renderScene(*outgoingScene, softOut);
+                        }
+                        renderScene(*program, softIn);
+                    }
+                    gl->glDisable(GL_SCISSOR_TEST);
+
+                    outClipL = hardOutStart;
+                    outClipR = w;
+                    inClipL = 0;
+                    inClipR = hardInEnd;
+                    if (softEnd > softStart) {
+                        // Soft band mixes on CPU overlays with both alphas at mid softness.
+                        outClipL = softStart;
+                        inClipR = softEnd;
+                    }
+                    readbackNv12(outgoingPtr, outgoingScene.has_value() ? 1.0f : 0.0f,
+                                 &program.value(), 1.0f, programFrame, 0.0f, 0.0f, 0.0f, 0.0f,
+                                 outClipL, outClipR, inClipL, inClipR);
+                    fbo_->release();
+                    gl->glFinish();
+                    // Skip default dual-render path.
+                    goto transition_frame_done;
                 }
 
                 if (outgoingScene.has_value()) {
-                    renderScene(*outgoingScene, outAlpha, outOffset);
+                    renderScene(*outgoingScene, outAlpha, outOffset, outYOffset);
                 }
-                renderScene(*program, inAlpha, inOffset);
+                renderScene(*program, inAlpha, inOffset, inYOffset);
                 readbackNv12(outgoingPtr, outgoingScene.has_value() ? outAlpha : 0.0f,
-                             &program.value(), inAlpha, programFrame, outOffset, inOffset);
+                             &program.value(), inAlpha, programFrame, outOffset, inOffset,
+                             outYOffset, inYOffset);
                 fbo_->release();
                 gl->glFinish();
+            transition_frame_done: ;
             } else {
                 renderAndReadback(*program, 1.0f, programFrame);
             }

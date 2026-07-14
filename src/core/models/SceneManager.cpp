@@ -88,6 +88,10 @@ QString transitionTypeToString(TransitionType type) {
     case TransitionType::Fade: return "Fade";
     case TransitionType::Slide: return "Slide";
     case TransitionType::FadeToBlack: return "FadeToBlack";
+    case TransitionType::Wipe: return "Wipe";
+    case TransitionType::Swipe: return "Swipe";
+    case TransitionType::Luma: return "Luma";
+    case TransitionType::Stinger: return "Stinger";
     }
     return "Fade";
 }
@@ -96,6 +100,10 @@ TransitionType transitionTypeFromString(const QString& s) {
     if (s == "Cut") return TransitionType::Cut;
     if (s == "Slide") return TransitionType::Slide;
     if (s == "FadeToBlack") return TransitionType::FadeToBlack;
+    if (s == "Wipe") return TransitionType::Wipe;
+    if (s == "Swipe") return TransitionType::Swipe;
+    if (s == "Luma") return TransitionType::Luma;
+    if (s == "Stinger") return TransitionType::Stinger;
     return TransitionType::Fade;
 }
 

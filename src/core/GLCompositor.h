@@ -55,14 +55,18 @@ private:
     void compositorThreadFunc();
     bool initGl();
     void cleanupGl();
-    void renderScene(const Scene& scene, float alpha, float xOffset = 0.0f);
+    void renderScene(const Scene& scene, float alpha, float xOffset = 0.0f, float yOffset = 0.0f);
     void renderAndReadback(const Scene& scene, float alpha, VideoFrame& output);
     void drawLayer(const VideoFrame& frame, const SourceTransform& transform, float alpha,
-                   float xOffset = 0.0f);
+                   float xOffset = 0.0f, float yOffset = 0.0f);
     void compositeRgbaOverlays(const Scene& scene, float alpha, QImage& canvas,
-                               float xOffset = 0.0f);
+                               float xOffset = 0.0f, float yOffset = 0.0f,
+                               int clipLeft = -1, int clipRight = -1);
     void readbackNv12(const Scene* sceneA, float alphaA, const Scene* sceneB, float alphaB,
-                      VideoFrame& output, float offsetA = 0.0f, float offsetB = 0.0f);
+                      VideoFrame& output, float offsetA = 0.0f, float offsetB = 0.0f,
+                      float yOffsetA = 0.0f, float yOffsetB = 0.0f,
+                      int clipALeft = -1, int clipARight = -1,
+                      int clipBLeft = -1, int clipBRight = -1);
     [[nodiscard]] std::optional<VideoFrame> delayedFrame(const std::string& sourceId,
                                                          VideoFrame frame, int delayMs);
 

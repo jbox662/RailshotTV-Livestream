@@ -302,7 +302,11 @@ void MainWindow::setupUi() {
     transitionCombo_->addItem("Fade", static_cast<int>(TransitionType::Fade));
     transitionCombo_->addItem("Cut", static_cast<int>(TransitionType::Cut));
     transitionCombo_->addItem("Slide", static_cast<int>(TransitionType::Slide));
+    transitionCombo_->addItem("Swipe", static_cast<int>(TransitionType::Swipe));
+    transitionCombo_->addItem("Wipe", static_cast<int>(TransitionType::Wipe));
+    transitionCombo_->addItem("Luma Wipe", static_cast<int>(TransitionType::Luma));
     transitionCombo_->addItem("Fade to Black", static_cast<int>(TransitionType::FadeToBlack));
+    transitionCombo_->addItem("Stinger", static_cast<int>(TransitionType::Stinger));
     transitionLayout->addWidget(transitionField);
     transitionLayout->addWidget(transitionCombo_);
     auto* durationField = new QLabel("Duration", transitionBody);
