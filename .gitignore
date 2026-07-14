@@ -2,6 +2,7 @@
 build/
 .vs/
 out/
+dist/
 cmake-build-*/
 CMakeCache.txt
 CMakeFiles/

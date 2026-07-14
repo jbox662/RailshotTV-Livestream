@@ -58,6 +58,7 @@ endif()
 # ---------------------------------------------------------------------------
 set(SOURCES
     src/main.cpp
+    src/resources/RailShotBroadcaster.rc
     src/core/Logger.cpp
     src/core/FrameData.cpp
     src/core/GLCompositor.cpp

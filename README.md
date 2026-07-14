@@ -1,91 +1,92 @@
 # RailShot TV Windows Broadcaster
 
-Professional live streaming application for billiard venues.
+RailShot TV is a native Windows live-production application for general broadcasts and sports/billiards venues. It uses an original RailShot interface and implementation; OBS Studio is used only as a behavior checklist.
 
-## Phase 4 Status
+## Highlights
 
-Generic production features with optional billiard presets:
-- **Production profile** — General vs Sports / Billiards
-- **Scoreboard overlay** source + dock panel (+1/−1, names, race-to, game type)
-- **Browser source** — URL or local HTML overlay (simple HTML renderer)
-- **Web remote** — phone-friendly control page at `http://localhost:8080`
-- **Venue Mode** — simplified full-screen scene launcher with optional billiard presets
-- **RailShot API client** — stub ready for OAuth + cloud score sync
+- Scene collections, layered sources, Studio Mode, Preview/Program, and hotkeys
+- Video, display, WGC window/game, image, media, browser, text, color, scoreboard, and NDI sources
+- Desktop, microphone/device, media, and per-application audio capture
+- Audio mixer, monitoring, sync delay, gain, compressor, gate, and noise suppression
+- Crop, keying, mask, color-grade, scale, scroll, sharpness, and render-delay filters
+- Cut, fade, fade-to-black, slide, swipe, wipe, luma-wipe, and stinger-style transitions
+- NVENC, Quick Sync, AMF, and x264 H.264 encoding with automatic fallback
+- RTMP streaming presets, MP4/MKV/MOV recording, replay buffer, remux, ISO recording, and virtual camera
+- Phone-friendly HTTP remote on port 8080
+- obs-websocket v5-compatible remote on port 4455, with optional challenge authentication
+- RailShot scoreboard and simplified Venue Mode
 
-## Phase 3 Status
+## Install
 
-Professional production features:
-- **Studio Mode** — dual Preview/Program monitors with Transition button
-- **Local Recording** — program mix recorded to MP4 (`~/Videos/RailShot/Recordings/`)
-- **ISO Recording** — per-camera isolated MP4 files before compositing
-- **NDI Integration** — source discovery and receiver stub (full support when SDK is in `vendor/ndi/`)
+Run `RailShotTV-Windows-x64-Setup.exe` and leave **Register the RailShot Virtual Camera** selected if you want RailShot to appear as a camera in other applications. Installer elevation is required only for installation and virtual-camera registration.
 
-## Phase 2 Status
+The portable ZIP can also be extracted anywhere. To register its virtual camera, right-click `scripts\install-virtualcam.bat` and choose **Run as administrator**. Use `scripts\uninstall-virtualcam.bat` before moving or deleting a registered portable installation.
 
-Scene management and multi-source production:
-- `Source`, `Scene`, `SceneCollection` models with `SceneManager` singleton
-- Scenes list + Sources list UI (bottom panels)
-- Source types: Video Device, Image (PNG/JPG), Media File (MP4/MP3 with loop)
-- Scene compositor with z-order layering and per-source transforms
-- Preview drag-to-move transform controls
-- 300ms crossfade transitions between scenes
-- Audio mixer with per-source volume sliders and mute toggles (logarithmic dB)
-- Auto-save scene collections every 60 seconds
+Windows 10 version 2004 or later is recommended for Windows Graphics Capture and per-application audio. The Microsoft Edge WebView2 Runtime is required for browser sources and is included with current Windows 10/11 installations.
 
-## Phase 1 Status
+## First broadcast
 
-Core engine with:
-- DirectShow webcam capture
-- WASAPI microphone capture
-- OpenGL compositor (1920x1080, dedicated thread)
-- FFmpeg H.264 encoder (NVENC / AMF / QSV / libx264 fallback)
-- RTMP output via librtmp + FLV muxing
-- Multi-threaded pipeline (capture → compositor → encoder → output)
+1. Add or select a scene.
+2. Add a camera, display, window, game, media, or browser source.
+3. Open **Settings → Stream**, choose a service, and enter the stream key.
+4. Configure the encoder and recording/replay options under **Settings → Output**.
+5. Click **Start Streaming**, **Start Recording**, or both.
 
-## Prerequisites
+Recordings and saved replays default to `%USERPROFILE%\Videos\RailShot\Recordings`.
 
-- Windows 10/11 (64-bit)
-- Visual Studio 2022 with C++ desktop development
-- Qt 6.4+ (Widgets, OpenGL, OpenGLWidgets)
-- FFmpeg shared libraries (with NVENC/AMF/QSV enabled)
-- librtmp
+## Remote control
 
-Place dependencies in `/vendor` — see [vendor/README.md](vendor/README.md).
+- Web remote: `http://<computer-ip>:8080`
+- WebSocket: `ws://<computer-ip>:4455`
 
-## Build
+The WebSocket endpoint supports the obs-websocket v5 Hello/Identify flow, common scene/studio/stream/record requests, request batches, and output/scene events. Configure a password under **Settings → Stream** before exposing the port beyond a trusted LAN. Existing RailShot string operations remain supported after authentication.
+
+## Developer build
+
+Requirements:
+
+- Windows 10/11 x64
+- Visual Studio 2022 with Desktop development with C++
+- CMake
+- Qt 6.8.2, FFmpeg shared libraries, and librtmp under `vendor/`
+
+Install local dependencies:
 
 ```powershell
-cmake -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="C:\path\to\qt"
+powershell -ExecutionPolicy Bypass -File scripts\setup-vendor.ps1
+```
+
+Build:
+
+```powershell
+cmake -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release
 ```
 
-Deploy Qt DLLs:
+Package the portable folder and ZIP:
 
 ```powershell
-windeployqt build\Release\RailShotBroadcaster.exe
+powershell -ExecutionPolicy Bypass -File scripts\package-release.ps1
 ```
 
-Copy FFmpeg DLLs from `vendor/ffmpeg/bin` next to the executable.
+To also compile the Inno Setup installer:
 
-## Phase 1 Testing Gate
-
-Stream 1080p30 webcam to YouTube Live for 60 continuous minutes with less than 0.1% dropped frames.
-
-1. Launch the app
-2. Select your webcam
-3. Enter your YouTube RTMP URL (`rtmp://a.rtmp.youtube.com/live2/STREAM_KEY`)
-4. Click **Start Stream**
-5. Monitor the stats bar for FPS, drop rate, and connection status
-6. Run for 60 minutes and verify drop rate stays below 0.1%
-
-## Project Structure
-
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\package-release.ps1 -BuildInstaller
 ```
-src/
-  capture/     DirectShow + WASAPI capture
-  core/        Compositor, StreamController, utilities
-  encoder/     FFmpegEncoder
-  output/      RtmpOutput
-  ui/          MainWindow, PreviewWidget
-vendor/        Third-party binaries
+
+The packaging script runs `windeployqt`, includes the MSVC runtime and media DLLs, validates required FFmpeg runtimes, includes the virtual camera, and writes SHA-256 checksums. Inno Setup 6 is required only for `-BuildInstaller`.
+
+## Project structure
+
+```text
+src/capture/     Video, window/game, browser/media, and audio sources
+src/core/        Scene model, compositor, mixer, settings, remote command bus
+src/encoder/     FFmpeg encoder
+src/network/     HTTP and WebSocket remotes
+src/output/      RTMP, recording, replay, remux, and virtual camera
+src/ui/          RailShot Qt interface
+plugins/         DirectShow virtual camera filter
+installer/       Inno Setup definition
+scripts/         Dependency, packaging, and registration scripts
 ```

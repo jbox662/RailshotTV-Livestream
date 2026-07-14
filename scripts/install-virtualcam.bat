@@ -2,7 +2,8 @@
 REM Register RailShot Virtual Camera (64-bit DirectShow filter). Run as Administrator.
 setlocal
 set "SCRIPT_DIR=%~dp0"
-set "DLL=%SCRIPT_DIR%..\build\Release\railshot-virtualcam64.dll"
+set "DLL=%SCRIPT_DIR%..\railshot-virtualcam64.dll"
+if not exist "%DLL%" set "DLL=%SCRIPT_DIR%..\build\Release\railshot-virtualcam64.dll"
 if not exist "%DLL%" set "DLL=%SCRIPT_DIR%..\build\Release\plugins\railshot-virtualcam64.dll"
 if not exist "%DLL%" (
   echo ERROR: railshot-virtualcam64.dll not found. Build Release first.
