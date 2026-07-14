@@ -41,6 +41,16 @@ Recordings and saved replays default to `%USERPROFILE%\Videos\RailShot\Recording
 
 The WebSocket endpoint supports the obs-websocket v5 Hello/Identify flow, common scene/studio/stream/record requests, request batches, and output/scene events. Configure a password under **Settings → Stream** before exposing the port beyond a trusted LAN. Existing RailShot string operations remain supported after authentication.
 
+## Troubleshooting and limitations
+
+- Logs: `%LOCALAPPDATA%\RailShot TV\RailShot TV Broadcaster\logs\railshot.log`
+- Browser profile/cache: `%LOCALAPPDATA%\RailShot TV\RailShot TV Broadcaster\webview2-data`
+- If Windows Firewall prompts for network access, allow private networks only unless the broadcaster must be controlled from another routed network.
+- Browser sources require the Microsoft Edge WebView2 Runtime.
+- Game Capture is an inject-free Windows Graphics Capture/BitBlt implementation. Protected, exclusive-fullscreen, and anti-cheat-protected games may not be capturable.
+- NDI support is included only when the NDI SDK is present at build/package time.
+- For virtual-camera registration errors, rerun the installer or registration script as administrator.
+
 ## Developer build
 
 Requirements:

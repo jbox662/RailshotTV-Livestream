@@ -10,6 +10,7 @@
 #include <QJsonObject>
 #include <QMetaObject>
 #include <QScreen>
+#include <QStandardPaths>
 #include <QTimer>
 #include <QUrl>
 #include <QWidget>
@@ -265,8 +266,12 @@ void WebView2BrowserHost::setCustomCss(const QString& css) {
 
 void WebView2BrowserHost::initializeEnvironment() {
 #ifdef RAILSHOT_HAS_WEBVIEW2
-    const QString userData =
-        QDir(QCoreApplication::applicationDirPath()).filePath("webview2-data");
+    QString dataRoot =
+        QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    if (dataRoot.isEmpty()) {
+        dataRoot = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    }
+    const QString userData = QDir(dataRoot).filePath(QStringLiteral("webview2-data"));
     QDir().mkpath(userData);
 
     CreateCoreWebView2EnvironmentWithOptions(

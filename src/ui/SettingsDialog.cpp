@@ -87,7 +87,8 @@ SettingsDialog::SettingsDialog(QWidget* parent)
                        "Stop streaming and virtual camera before changing canvas size.\n"
                        "Renaming here updates the active scene collection. "
                        "Create/switch collections from the Scenes dock.\n"
-                       "Register Virtual Camera once (admin) via scripts\\install-virtualcam.bat."),
+                       "The installer can register Virtual Camera automatically. "
+                       "Portable builds include an administrator registration script."),
         videoPage);
     videoHint->setWordWrap(true);
     videoHint->setObjectName(QStringLiteral("rsFieldLabel"));

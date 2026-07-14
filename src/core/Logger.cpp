@@ -3,6 +3,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QStandardPaths>
 #include <QTextStream>
 
 #include <chrono>
@@ -28,11 +29,16 @@ const char* levelName(LogLevel level) {
 }
 
 QString logFilePath() {
-    const QString dir = QCoreApplication::applicationDirPath();
+    QString dir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    if (dir.isEmpty()) {
+        dir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    }
     if (dir.isEmpty()) {
         return QStringLiteral("railshot.log");
     }
-    return QDir(dir).filePath(QStringLiteral("railshot.log"));
+    const QString logsDir = QDir(dir).filePath(QStringLiteral("logs"));
+    QDir().mkpath(logsDir);
+    return QDir(logsDir).filePath(QStringLiteral("railshot.log"));
 }
 
 } // namespace

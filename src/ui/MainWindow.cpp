@@ -492,8 +492,10 @@ void MainWindow::setupMenuBar() {
     helpMenu->addAction(QStringLiteral("&About RailShot TV"), this, [this]() {
         QMessageBox::about(
             this, QStringLiteral("About RailShot TV"),
-            QStringLiteral("RailShot TV Broadcaster\nVersion 1.0.0\n\n"
-                           "Broadcast control for billiards venues."));
+            QStringLiteral("RailShot TV Broadcaster\nVersion %1\n\n"
+                           "Native Windows live production for general broadcasts "
+                           "and sports venues.")
+                .arg(QCoreApplication::applicationVersion()));
     });
 }
 

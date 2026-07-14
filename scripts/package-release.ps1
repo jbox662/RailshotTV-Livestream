@@ -66,6 +66,7 @@ Copy-Item (Join-Path $ProjectRoot "scripts\install-virtualcam.bat") `
 Copy-Item (Join-Path $ProjectRoot "scripts\uninstall-virtualcam.bat") `
     (Join-Path $StageDir "scripts\uninstall-virtualcam.bat") -Force
 Copy-Item (Join-Path $ProjectRoot "README.md") $StageDir -Force
+Copy-Item (Join-Path $ProjectRoot "THIRD_PARTY_NOTICES.md") $StageDir -Force
 
 $qtRoot = Join-Path $ProjectRoot "vendor\qt\6.8.2\msvc2022_64"
 $windeployqt = Join-Path $qtRoot "bin\windeployqt.exe"

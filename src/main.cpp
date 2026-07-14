@@ -67,6 +67,36 @@ QWidget {
     font-size: 12px;
 }
 
+QDialog {
+    background-color: #0f1311;
+}
+
+QTabWidget::pane {
+    background-color: #0f1311;
+    border: 1px solid #2a342e;
+    border-radius: 4px;
+}
+
+QTabBar::tab {
+    background-color: #121714;
+    color: #9aa69d;
+    border: 1px solid #2a342e;
+    padding: 7px 14px;
+}
+
+QTabBar::tab:selected {
+    background-color: #1e4d34;
+    color: #ffffff;
+    border-color: #2f9e62;
+}
+
+QToolTip {
+    background-color: #18211c;
+    color: #e8ebe6;
+    border: 1px solid #2f9e62;
+    padding: 4px 6px;
+}
+
 QFrame#rsDockPanel {
     background-color: #121714;
     border: none;
@@ -332,7 +362,7 @@ QSlider#rsVolumeSlider::sub-page:horizontal {
     border-radius: 2px;
 }
 
-QComboBox, QSpinBox, QLineEdit, QPlainTextEdit {
+QComboBox, QSpinBox, QDoubleSpinBox, QLineEdit, QPlainTextEdit {
     background-color: #0c100e;
     border: 1px solid #2a342e;
     border-radius: 4px;
@@ -342,11 +372,12 @@ QComboBox, QSpinBox, QLineEdit, QPlainTextEdit {
     selection-background-color: #1e4d34;
 }
 
-QComboBox:focus, QSpinBox:focus, QLineEdit:focus, QPlainTextEdit:focus {
+QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus, QLineEdit:focus, QPlainTextEdit:focus {
     border-color: #2f9e62;
 }
 
-QComboBox::drop-down, QSpinBox::up-button, QSpinBox::down-button {
+QComboBox::drop-down, QSpinBox::up-button, QSpinBox::down-button,
+QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {
     border: none;
     background: #1a211c;
     width: 18px;
@@ -408,6 +439,28 @@ QCheckBox#rsMuteToggle::indicator:checked {
 QScrollArea {
     border: none;
     background: transparent;
+}
+
+QScrollBar:vertical, QScrollBar:horizontal {
+    background: #0c100e;
+    border: none;
+    margin: 0;
+}
+
+QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
+    background: #2a342e;
+    border-radius: 4px;
+    min-height: 24px;
+    min-width: 24px;
+}
+
+QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {
+    background: #2f9e62;
+}
+
+QScrollBar::add-line, QScrollBar::sub-line {
+    width: 0;
+    height: 0;
 }
 )";
 
