@@ -196,9 +196,15 @@ SettingsDialog::SettingsDialog(QWidget* parent)
     streamForm->addRow(QStringLiteral("Server"), streamServerEdit_);
     streamForm->addRow(QStringLiteral("Stream key"), streamKeyEdit_);
     streamForm->addRow(QStringLiteral("Combined RTMP URL"), rtmpEdit_);
+    websocketPasswordEdit_ = new QLineEdit(streamPage);
+    websocketPasswordEdit_->setEchoMode(QLineEdit::Password);
+    websocketPasswordEdit_->setPlaceholderText(QStringLiteral("Empty = no auth (local tools)"));
+    streamForm->addRow(QStringLiteral("obs-websocket password"), websocketPasswordEdit_);
     auto* streamHint = new QLabel(
         QStringLiteral("Pick a service to fill the ingest server, then paste your stream key. "
-                       "Combined URL is used by the main bar and Start Streaming."),
+                       "Combined URL is used by the main bar and Start Streaming.\n"
+                       "WebSocket remote listens on port 4455 with obs-websocket v5-compatible "
+                       "Hello/Identify/Request. Leave password empty for unauthenticated local use."),
         streamPage);
     streamHint->setWordWrap(true);
     streamHint->setObjectName(QStringLiteral("rsFieldLabel"));
@@ -313,6 +319,7 @@ void SettingsDialog::loadUi() {
     streamServiceCombo_->blockSignals(false);
     streamServerEdit_->setText(QString::fromStdString(original_.streamServer));
     streamKeyEdit_->setText(QString::fromStdString(original_.streamKey));
+    websocketPasswordEdit_->setText(QString::fromStdString(original_.websocketPassword));
 }
 
 AppSettingsData SettingsDialog::collectDraft() const {
@@ -337,6 +344,7 @@ AppSettingsData SettingsDialog::collectDraft() const {
     draft.streamService = streamServiceCombo_->currentData().toString().toStdString();
     draft.streamServer = streamServerEdit_->text().trimmed().toStdString();
     draft.streamKey = streamKeyEdit_->text().trimmed().toStdString();
+    draft.websocketPassword = websocketPasswordEdit_->text().toStdString();
     if (draft.streamService != "Custom") {
         draft.defaultRtmpUrl = combineRtmpUrl(draft.streamServer, draft.streamKey);
     }

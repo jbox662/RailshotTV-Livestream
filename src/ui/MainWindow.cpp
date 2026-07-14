@@ -1421,6 +1421,7 @@ void MainWindow::onOpenSettings() {
         keep.streamService = settings.streamService;
         keep.streamServer = settings.streamServer;
         keep.streamKey = settings.streamKey;
+        keep.websocketPassword = settings.websocketPassword;
         keep.micVolume = settings.micVolume;
         keep.micMuted = settings.micMuted;
         keep.micSyncDelayMs = settings.micSyncDelayMs;

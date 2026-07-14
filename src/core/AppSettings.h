@@ -53,6 +53,9 @@ struct AppSettingsData {
     std::string streamService = "Custom"; // Custom | Twitch | YouTube | Kick | Facebook
     std::string streamServer;
     std::string streamKey;
+
+    // Remote protocol (Phase F7) — empty = no password (local tools)
+    std::string websocketPassword;
 };
 
 class AppSettings {

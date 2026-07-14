@@ -54,6 +54,7 @@ private:
     QComboBox* streamServiceCombo_ = nullptr;
     QLineEdit* streamServerEdit_ = nullptr;
     QLineEdit* streamKeyEdit_ = nullptr;
+    QLineEdit* websocketPasswordEdit_ = nullptr;
 
     QKeySequenceEdit* hkTransition_ = nullptr;
     QKeySequenceEdit* hkStream_ = nullptr;

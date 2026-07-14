@@ -113,6 +113,8 @@ void AppSettings::load() {
         obj.value(QStringLiteral("streamService")).toString(QStringLiteral("Custom")).toStdString();
     data_.streamServer = obj.value(QStringLiteral("streamServer")).toString().toStdString();
     data_.streamKey = obj.value(QStringLiteral("streamKey")).toString().toStdString();
+    data_.websocketPassword =
+        obj.value(QStringLiteral("websocketPassword")).toString().toStdString();
 
     data_.canvasWidth = std::clamp(data_.canvasWidth, 320, 7680);
     data_.canvasHeight = std::clamp(data_.canvasHeight, 240, 4320);
@@ -156,6 +158,7 @@ bool AppSettings::save() const {
     obj[QStringLiteral("streamService")] = QString::fromStdString(data_.streamService);
     obj[QStringLiteral("streamServer")] = QString::fromStdString(data_.streamServer);
     obj[QStringLiteral("streamKey")] = QString::fromStdString(data_.streamKey);
+    obj[QStringLiteral("websocketPassword")] = QString::fromStdString(data_.websocketPassword);
 
     const QByteArray bytes = QJsonDocument(obj).toJson(QJsonDocument::Indented);
     std::ofstream out(savePath_, std::ios::binary | std::ios::trunc);
