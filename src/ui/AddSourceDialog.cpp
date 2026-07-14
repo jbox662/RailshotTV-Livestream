@@ -33,8 +33,11 @@ QVector<SourceOption> allOptions() {
          QStringLiteral("Capture an entire monitor"),
          QStringLiteral("Capture"), QStringLiteral("Display Capture")},
         {QStringLiteral("window_capture"), QStringLiteral("Window Capture"),
-         QStringLiteral("Capture a single application window"),
+         QStringLiteral("Capture a single application window (WGC)"),
          QStringLiteral("Capture"), QStringLiteral("Window Capture")},
+        {QStringLiteral("game_capture"), QStringLiteral("Game Capture"),
+         QStringLiteral("Inject-free game/window capture via Graphics Capture"),
+         QStringLiteral("Capture"), QStringLiteral("Game Capture")},
         {QStringLiteral("image"), QStringLiteral("Image"),
          QStringLiteral("Static PNG or JPEG on the canvas"),
          QStringLiteral("Media"), QStringLiteral("Image")},
@@ -47,6 +50,9 @@ QVector<SourceOption> allOptions() {
         {QStringLiteral("desktop_audio"), QStringLiteral("Desktop Audio"),
          QStringLiteral("System playback via WASAPI loopback"),
          QStringLiteral("Audio"), QStringLiteral("Desktop Audio")},
+        {QStringLiteral("app_audio"), QStringLiteral("Application Audio Capture"),
+         QStringLiteral("Capture audio from a single process (WASAPI process loopback)"),
+         QStringLiteral("Audio"), QStringLiteral("Application Audio Capture")},
         {QStringLiteral("audio_input"), QStringLiteral("Audio Input Capture"),
          QStringLiteral("Microphone or line-in via WASAPI"),
          QStringLiteral("Audio"), QStringLiteral("Audio Input Capture")},
@@ -109,7 +115,7 @@ QIcon makeSourceIcon(const QString& id, const QColor& accent) {
         p.drawRoundedRect(QRectF(10, 12, 28, 20), 2, 2);
         p.drawLine(QPointF(18, 36), QPointF(30, 36));
         p.drawLine(QPointF(24, 32), QPointF(24, 36));
-    } else if (id == QLatin1String("window_capture")) {
+    } else if (id == QLatin1String("window_capture") || id == QLatin1String("game_capture")) {
         p.drawRoundedRect(QRectF(11, 12, 26, 24), 3, 3);
         p.drawLine(QPointF(11, 18), QPointF(37, 18));
         p.drawEllipse(QPointF(15, 15), 1.2, 1.2);
@@ -136,7 +142,8 @@ QIcon makeSourceIcon(const QString& id, const QColor& accent) {
             p.setPen(Qt::NoPen);
             p.drawPolygon(play);
         }
-    } else if (id == QLatin1String("desktop_audio") || id == QLatin1String("audio_input")) {
+    } else if (id == QLatin1String("desktop_audio") || id == QLatin1String("audio_input")
+               || id == QLatin1String("app_audio")) {
         p.drawRoundedRect(QRectF(14, 14, 12, 16), 2, 2);
         p.drawArc(QRectF(26, 16, 10, 14), -60 * 16, 120 * 16);
         p.drawArc(QRectF(30, 13, 10, 20), -50 * 16, 100 * 16);

@@ -1,8 +1,8 @@
 #pragma once
 
 #include "capture/ISourceProvider.h"
-#include "capture/WindowBitbltCapture.h"
 #include "capture/WgcWindowCapture.h"
+#include "capture/WindowBitbltCapture.h"
 #include "core/ThreadSafeQueue.h"
 
 #include <atomic>
@@ -10,10 +10,11 @@
 
 namespace railshot {
 
-class WindowCaptureSource : public ISourceProvider {
+// Inject-free game capture: WGC preferential, BitBlt fallback (not OBS graphics hooks).
+class GameCaptureSource : public ISourceProvider {
 public:
-    explicit WindowCaptureSource(Source config);
-    ~WindowCaptureSource() override;
+    explicit GameCaptureSource(Source config);
+    ~GameCaptureSource() override;
 
     bool start() override;
     void stop() override;

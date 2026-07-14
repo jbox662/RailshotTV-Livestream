@@ -1,8 +1,7 @@
 #pragma once
 
 #include "capture/ISourceProvider.h"
-#include "capture/WindowBitbltCapture.h"
-#include "capture/WgcWindowCapture.h"
+#include "capture/WasapiAudioCapture.h"
 #include "core/ThreadSafeQueue.h"
 
 #include <atomic>
@@ -10,10 +9,10 @@
 
 namespace railshot {
 
-class WindowCaptureSource : public ISourceProvider {
+class ApplicationAudioSource : public ISourceProvider {
 public:
-    explicit WindowCaptureSource(Source config);
-    ~WindowCaptureSource() override;
+    explicit ApplicationAudioSource(Source config);
+    ~ApplicationAudioSource() override;
 
     bool start() override;
     void stop() override;
@@ -22,17 +21,15 @@ public:
 
     [[nodiscard]] std::optional<VideoFrame> latestVideoFrame() override;
     [[nodiscard]] std::optional<AudioFrame> latestAudioFrame() override;
-    [[nodiscard]] bool hasVideo() const override { return true; }
-    [[nodiscard]] bool hasAudio() const override { return false; }
+    [[nodiscard]] bool hasVideo() const override { return false; }
+    [[nodiscard]] bool hasAudio() const override { return true; }
     [[nodiscard]] const Source& config() const override { return config_; }
 
 private:
     Source config_;
-    std::unique_ptr<WgcWindowCapture> wgc_;
-    std::unique_ptr<WindowBitbltCapture> bitblt_;
-    ThreadSafeQueue<VideoFrame> queue_;
+    std::unique_ptr<WasapiAudioCapture> capture_;
+    ThreadSafeQueue<AudioFrame> queue_;
     std::atomic<bool> running_{false};
-    bool usingWgc_ = false;
 };
 
 } // namespace railshot

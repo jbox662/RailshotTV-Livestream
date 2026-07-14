@@ -1,11 +1,13 @@
 #pragma once
 
 #include "capture/ISourceProvider.h"
+#include "capture/ApplicationAudioSource.h"
 #include "capture/AudioDeviceSource.h"
 #include "capture/BrowserSource.h"
 #include "capture/ColorSource.h"
 #include "capture/DesktopAudioSource.h"
 #include "capture/DisplayCaptureSource.h"
+#include "capture/GameCaptureSource.h"
 #include "capture/ImageSource.h"
 #include "capture/MediaSource.h"
 #include "capture/NdiSource.h"

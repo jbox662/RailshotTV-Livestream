@@ -40,6 +40,10 @@ std::unique_ptr<ISourceProvider> SourceRegistry::createProvider(const Source& so
         return std::make_unique<ColorSource>(source);
     case SourceType::DesktopAudio:
         return std::make_unique<DesktopAudioSource>(source);
+    case SourceType::ApplicationAudio:
+        return std::make_unique<ApplicationAudioSource>(source);
+    case SourceType::GameCapture:
+        return std::make_unique<GameCaptureSource>(source);
     }
     return nullptr;
 }
@@ -53,7 +57,8 @@ bool SourceRegistry::canReuseProvider(const ISourceProvider& provider, const Sou
     if (source.type == SourceType::Browser || source.type == SourceType::Scoreboard
         || source.type == SourceType::Text || source.type == SourceType::Color
         || source.type == SourceType::MediaFile || source.type == SourceType::AudioDevice
-        || source.type == SourceType::DesktopAudio) {
+        || source.type == SourceType::DesktopAudio || source.type == SourceType::ApplicationAudio
+        || source.type == SourceType::GameCapture || source.type == SourceType::WindowCapture) {
         return true;
     }
     return current.pathOrDeviceId == source.pathOrDeviceId;

@@ -636,6 +636,8 @@ QWidget* MainWindow::makeSourceRowWidget(const Source& src, QListWidget* list) {
     case SourceType::Text: typeLabel = "Text"; break;
     case SourceType::Color: typeLabel = "Color"; break;
     case SourceType::DesktopAudio: typeLabel = "Desk"; break;
+    case SourceType::ApplicationAudio: typeLabel = "App"; break;
+    case SourceType::GameCapture: typeLabel = "Game"; break;
     }
 
     auto* name = new QLabel(
@@ -978,6 +980,9 @@ void MainWindow::onAddSource() {
     } else if (choice == "window_capture") {
         src.type = SourceType::WindowCapture;
         src.transform = centeredSourceTransform(1280.0f, 720.0f);
+    } else if (choice == "game_capture") {
+        src.type = SourceType::GameCapture;
+        src.transform = centeredSourceTransform(1280.0f, 720.0f);
     } else if (choice == "image") {
         src.type = SourceType::Image;
     } else if (choice == "media_file") {
@@ -985,6 +990,9 @@ void MainWindow::onAddSource() {
         src.loop = true;
     } else if (choice == "desktop_audio") {
         src.type = SourceType::DesktopAudio;
+        src.transform = {0, 0, 1, 1};
+    } else if (choice == "app_audio") {
+        src.type = SourceType::ApplicationAudio;
         src.transform = {0, 0, 1, 1};
     } else if (choice == "audio_input") {
         src.type = SourceType::AudioDevice;
@@ -1032,7 +1040,8 @@ void MainWindow::onAddSource() {
 
     if (choice != "browser" && choice != "scoreboard" && choice != "text"
         && choice != "color" && choice != "display_capture"
-        && choice != "window_capture" && choice != "desktop_audio"
+        && choice != "window_capture" && choice != "game_capture"
+        && choice != "desktop_audio" && choice != "app_audio"
         && choice != "audio_input") {
         src.transform = centeredSourceTransform(960.0f, 540.0f);
     }
@@ -1064,7 +1073,8 @@ void MainWindow::onAddSource() {
         BrowserSource::reloadAll();
         controller_->onSceneCollectionChanged();
         refreshUi();
-    } else if (choice == "display_capture" || choice == "window_capture" || choice == "text"
+    } else if (choice == "display_capture" || choice == "window_capture"
+               || choice == "game_capture" || choice == "app_audio" || choice == "text"
                || choice == "color") {
         // Select camera / file / picker immediately so the source is not blank.
         for (int i = 0; i < sourcesList_->count(); ++i) {
@@ -1253,7 +1263,7 @@ void MainWindow::onConfigureSource() {
                 src->transform.height = static_cast<float>(m.height);
             }
         }
-    } else if (src->type == SourceType::WindowCapture) {
+    } else if (src->type == SourceType::WindowCapture || src->type == SourceType::GameCapture) {
         const auto windows = WindowBitbltCapture::enumerateWindows();
         if (windows.empty()) {
             QMessageBox::warning(this, "Window Capture",
@@ -1269,8 +1279,10 @@ void MainWindow::onConfigureSource() {
                 current = i;
             }
         }
+        const QString title = src->type == SourceType::GameCapture ? QStringLiteral("Game Capture")
+                                                                   : QStringLiteral("Window Capture");
         bool pickOk = false;
-        const QString choice = QInputDialog::getItem(this, "Window Capture", "Window:",
+        const QString choice = QInputDialog::getItem(this, title, QStringLiteral("Window:"),
                                                      names, current, false, &pickOk);
         if (pickOk) {
             const int idx = names.indexOf(choice);
@@ -1278,6 +1290,33 @@ void MainWindow::onConfigureSource() {
                 const auto& w = windows[static_cast<size_t>(idx)];
                 src->pathOrDeviceId = std::to_string(w.hwnd);
                 src->name = w.title;
+            }
+        }
+    } else if (src->type == SourceType::ApplicationAudio) {
+        const auto procs = WasapiAudioCapture::enumerateProcesses();
+        if (procs.empty()) {
+            QMessageBox::warning(this, "Application Audio", "No processes found.");
+            return;
+        }
+        QStringList names;
+        int current = 0;
+        for (int i = 0; i < static_cast<int>(procs.size()); ++i) {
+            const auto& p = procs[static_cast<size_t>(i)];
+            names << QStringLiteral("%1 (%2)").arg(QString::fromStdString(p.name)).arg(p.pid);
+            if (std::to_string(p.pid) == src->pathOrDeviceId) {
+                current = i;
+            }
+        }
+        bool pickOk = false;
+        const QString choice = QInputDialog::getItem(this, QStringLiteral("Application Audio"),
+                                                     QStringLiteral("Process:"), names, current,
+                                                     false, &pickOk);
+        if (pickOk) {
+            const int idx = names.indexOf(choice);
+            if (idx >= 0) {
+                const auto& p = procs[static_cast<size_t>(idx)];
+                src->pathOrDeviceId = std::to_string(p.pid);
+                src->name = p.name + " Audio";
             }
         }
     } else if (src->type == SourceType::Text) {

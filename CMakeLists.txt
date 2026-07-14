@@ -85,6 +85,9 @@ set(SOURCES
     src/capture/TextSource.cpp
     src/capture/DesktopAudioSource.cpp
     src/capture/AudioDeviceSource.cpp
+    src/capture/ApplicationAudioSource.cpp
+    src/capture/WgcWindowCapture.cpp
+    src/capture/GameCaptureSource.cpp
     src/capture/DxgiMonitorCapture.cpp
     src/capture/DisplayCaptureSource.cpp
     src/capture/WindowBitbltCapture.cpp
@@ -177,6 +180,7 @@ target_link_libraries(RailShotBroadcaster PRIVATE
     d3d11
     dxgi
     gdi32
+    windowsapp
 )
 
 if(EXISTS "${WEBVIEW2_INCLUDE_DIR}/WebView2.h" AND EXISTS "${WEBVIEW2_LOADER_LIB}")

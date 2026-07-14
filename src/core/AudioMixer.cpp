@@ -145,7 +145,9 @@ std::optional<AudioFrame> AudioMixer::mixActiveScene(SourceRegistry& registry) {
 
     for (const auto& src : scene->sources) {
         const bool audibleType = src.type == SourceType::MediaFile || src.type == SourceType::AudioDevice
-                                 || src.type == SourceType::DesktopAudio || src.type == SourceType::NDI;
+                                 || src.type == SourceType::DesktopAudio
+                                 || src.type == SourceType::ApplicationAudio
+                                 || src.type == SourceType::NDI;
         if (!audibleType) {
             continue;
         }

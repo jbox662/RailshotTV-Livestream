@@ -121,7 +121,7 @@ void AudioMixerWidget::rebuild() {
 
     for (const auto& src : scene->sources) {
         if (src.type == SourceType::MediaFile || src.type == SourceType::AudioDevice
-            || src.type == SourceType::DesktopAudio) {
+            || src.type == SourceType::DesktopAudio || src.type == SourceType::ApplicationAudio) {
             channelsLayout_->addWidget(
                 makeChannelStrip(src.id, src.name, src.volume, src.muted, src.syncDelayMs));
         }

@@ -19,7 +19,9 @@ enum class SourceType {
     WindowCapture,
     Text,
     Color,
-    DesktopAudio
+    DesktopAudio,
+    ApplicationAudio,
+    GameCapture
 };
 
 enum class TransitionType {

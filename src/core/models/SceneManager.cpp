@@ -59,6 +59,8 @@ QString sourceTypeToString(SourceType type) {
     case SourceType::Text: return "Text";
     case SourceType::Color: return "Color";
     case SourceType::DesktopAudio: return "DesktopAudio";
+    case SourceType::ApplicationAudio: return "ApplicationAudio";
+    case SourceType::GameCapture: return "GameCapture";
     }
     return "VideoDevice";
 }
@@ -75,6 +77,8 @@ SourceType sourceTypeFromString(const QString& s) {
     if (s == "Text") return SourceType::Text;
     if (s == "Color") return SourceType::Color;
     if (s == "DesktopAudio") return SourceType::DesktopAudio;
+    if (s == "ApplicationAudio") return SourceType::ApplicationAudio;
+    if (s == "GameCapture") return SourceType::GameCapture;
     return SourceType::VideoDevice;
 }
 

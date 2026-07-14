@@ -21,6 +21,11 @@ struct AudioDeviceInfo {
     bool isDefault = false;
 };
 
+struct ProcessAudioInfo {
+    unsigned long pid = 0;
+    std::string name;
+};
+
 class WasapiAudioCapture {
 public:
     WasapiAudioCapture();
@@ -31,10 +36,12 @@ public:
 
     [[nodiscard]] static std::vector<AudioDeviceInfo> enumerateInputDevices();
     [[nodiscard]] static std::vector<AudioDeviceInfo> enumerateOutputDevices();
+    [[nodiscard]] static std::vector<ProcessAudioInfo> enumerateProcesses();
 
     // Empty deviceId → default endpoint.
     bool openMicrophone(const std::string& deviceId = {});
     bool openDesktopLoopback(const std::string& deviceId = {});
+    bool openProcessLoopback(unsigned long pid);
     bool openDefaultMicrophone() { return openMicrophone({}); }
     bool openDefaultDesktopLoopback() { return openDesktopLoopback({}); }
 
@@ -51,6 +58,7 @@ private:
     void captureThreadFunc();
     void releaseResources();
     bool openEndpoint(bool capture, bool loopback, const std::string& deviceId, const char* label);
+    bool finishClientOpen(IAudioClient* client, const char* label);
     AudioFrame convertPacket(const uint8_t* data, uint32_t numFrames) const;
 
     int srcSampleRate_ = 48000;

@@ -35,12 +35,12 @@
 #   [x] Crop, chroma/color key, mask, LUT/color grade
 #   [x] Scale, scroll, sharpness, render delay
 #
-# Phase F4 — Capture parity — NEXT
-#   [ ] Game Capture (graphics hooks)
-#   [ ] Window Capture via WGC
-#   [ ] Application Audio Capture
+# Phase F4 — Capture parity — DONE
+#   [x] Game Capture (inject-free WGC/BitBlt; not DLL graphics hooks)
+#   [x] Window Capture via WGC (BitBlt fallback)
+#   [x] Application Audio Capture (process loopback)
 #
-# Phase F5 — Output / encoder
+# Phase F5 — Output / encoder — NEXT
 #   [ ] NVENC / QSV / x264 settings UI
 #   [ ] Recording formats / quality
 #   [ ] Replay buffer + remux
