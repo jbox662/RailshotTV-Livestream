@@ -1,0 +1,39 @@
+# Build
+build/
+.vs/
+out/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CMakeFiles/
+*.user
+*.suo
+*.exe
+*.dll
+*.lib
+*.obj
+*.pdb
+*.ilk
+*.exp
+
+# Local / logs
+aqtinstall.log
+*.log
+
+# Huge third-party trees (install locally under vendor/)
+vendor/
+obs-studio/
+
+# Secrets / local env
+.env
+.env.*
+*.pem
+credentials.json
+**/secrets.*
+
+# OS / IDE
+Thumbs.db
+.DS_Store
+.idea/
+.vscode/

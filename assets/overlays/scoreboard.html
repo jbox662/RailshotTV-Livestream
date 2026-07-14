@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 1920px;
+      height: 110px;
+      overflow: hidden;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: transparent;
+    }
+    .plate {
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(180deg, rgba(38,42,54,0.95) 0%, rgba(18,20,28,0.98) 100%);
+      border-bottom: 3px solid #dc2626;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 40px;
+      color: #f3f4f6;
+    }
+    .player {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      min-width: 420px;
+    }
+    .player.right { flex-direction: row-reverse; }
+    .score {
+      width: 72px;
+      height: 64px;
+      border-radius: 8px;
+      background: #202430;
+      border: 2px solid #3a4052;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 34px;
+      font-weight: 700;
+    }
+    .player.active .score {
+      background: linear-gradient(180deg, #3a82f6 0%, #2563eb 100%);
+      border-color: #93c5fd;
+    }
+    .name {
+      font-size: 20px;
+      font-weight: 700;
+      max-width: 300px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .center {
+      text-align: center;
+      min-width: 180px;
+    }
+    .meta {
+      font-size: 11px;
+      letter-spacing: 2px;
+      color: #9ca3af;
+      text-transform: uppercase;
+    }
+    .vs {
+      font-size: 18px;
+      font-weight: 700;
+      margin-top: 4px;
+    }
+    .race {
+      font-size: 11px;
+      color: #9ca3af;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="plate">
+    <div class="player active" id="p1">
+      <div class="score" id="p1-score">0</div>
+      <div class="name" id="p1-name">Player 1</div>
+    </div>
+    <div class="center">
+      <div class="meta" id="game-type">MATCH</div>
+      <div class="vs">VS</div>
+      <div class="race" id="race-to"></div>
+    </div>
+    <div class="player right" id="p2">
+      <div class="score" id="p2-score">0</div>
+      <div class="name" id="p2-name">Player 2</div>
+    </div>
+  </div>
+  <script>
+    // Poll RailShot remote API for live updates (OBS browser-source pattern)
+    async function refresh() {
+      try {
+        const res = await fetch('http://127.0.0.1:8080/api/score');
+        if (!res.ok) return;
+        const data = await res.json();
+        document.getElementById('p1-name').textContent = data.player1Name || 'Player 1';
+        document.getElementById('p2-name').textContent = data.player2Name || 'Player 2';
+        document.getElementById('p1-score').textContent = data.player1Score ?? 0;
+        document.getElementById('p2-score').textContent = data.player2Score ?? 0;
+        document.getElementById('p1').classList.toggle('active', data.activePlayer === 1);
+        document.getElementById('p2').classList.toggle('active', data.activePlayer === 2);
+        const gtMap = { 0: 'Generic', 1: 'EightBall', 2: 'NineBall' };
+        const gt = gtMap[data.gameType] || 'Generic';
+        document.getElementById('game-type').textContent =
+          gt === 'EightBall' ? '8-BALL' : gt === 'NineBall' ? '9-BALL' : 'MATCH';
+        document.getElementById('race-to').textContent =
+          data.raceTo > 0 && gt !== 'EightBall' ? `Race to ${data.raceTo}` : '';
+      } catch (e) { /* offline */ }
+    }
+    refresh();
+    setInterval(refresh, 500);
+  </script>
+</body>
+</html>
