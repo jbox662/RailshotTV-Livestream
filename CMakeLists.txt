@@ -8,6 +8,13 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/generated")
+configure_file(
+    "${CMAKE_SOURCE_DIR}/src/resources/RailShotBroadcaster.rc.in"
+    "${CMAKE_BINARY_DIR}/generated/RailShotBroadcaster.rc"
+    @ONLY
+)
+
 # ---------------------------------------------------------------------------
 # Vendor paths — place third-party binaries under /vendor
 # ---------------------------------------------------------------------------
@@ -58,7 +65,7 @@ endif()
 # ---------------------------------------------------------------------------
 set(SOURCES
     src/main.cpp
-    src/resources/RailShotBroadcaster.rc
+    "${CMAKE_BINARY_DIR}/generated/RailShotBroadcaster.rc"
     src/core/Logger.cpp
     src/core/FrameData.cpp
     src/core/GLCompositor.cpp
@@ -201,10 +208,15 @@ target_compile_definitions(RailShotBroadcaster PRIVATE
     WIN32_LEAN_AND_MEAN
     UNICODE
     _UNICODE
+    RAILSHOT_VERSION="${PROJECT_VERSION}"
 )
 
 if(MSVC)
     target_compile_options(RailShotBroadcaster PRIVATE /W4 /permissive-)
+    target_link_options(RailShotBroadcaster PRIVATE
+        "/MANIFEST:EMBED"
+        "/MANIFESTINPUT:${CMAKE_SOURCE_DIR}/src/resources/RailShotBroadcaster.manifest"
+    )
 else()
     target_compile_options(RailShotBroadcaster PRIVATE -Wall -Wextra)
 endif()

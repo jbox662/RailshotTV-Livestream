@@ -12,6 +12,16 @@ $OutputDir = Join-Path $ProjectRoot "dist"
 $StageDir = Join-Path $OutputDir "RailShotTV"
 $ExePath = Join-Path $BuildDir "$Configuration\RailShotBroadcaster.exe"
 $VirtualCamPath = Join-Path $BuildDir "$Configuration\railshot-virtualcam64.dll"
+$cmakeText = Get-Content (Join-Path $ProjectRoot "CMakeLists.txt") -Raw
+$versionMatch = [regex]::Match(
+    $cmakeText,
+    'project\s*\(\s*RailShotBroadcaster\s+VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)',
+    [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+)
+if (-not $versionMatch.Success) {
+    throw "Could not determine the application version from CMakeLists.txt."
+}
+$AppVersion = $versionMatch.Groups[1].Value
 
 function Copy-Dlls([string]$SourceDirectory, [string]$Destination) {
     if (-not (Test-Path $SourceDirectory)) {
@@ -56,6 +66,7 @@ if (Test-Path $StageDir) {
 New-Item -ItemType Directory -Path $StageDir -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $StageDir "scripts") -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $StageDir "assets\overlays") -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $StageDir "docs") -Force | Out-Null
 
 Copy-Item $ExePath $StageDir -Force
 Copy-Item $VirtualCamPath $StageDir -Force
@@ -67,6 +78,8 @@ Copy-Item (Join-Path $ProjectRoot "scripts\uninstall-virtualcam.bat") `
     (Join-Path $StageDir "scripts\uninstall-virtualcam.bat") -Force
 Copy-Item (Join-Path $ProjectRoot "README.md") $StageDir -Force
 Copy-Item (Join-Path $ProjectRoot "THIRD_PARTY_NOTICES.md") $StageDir -Force
+Copy-Item (Join-Path $ProjectRoot "docs\RELEASE_CHECKLIST.md") `
+    (Join-Path $StageDir "docs\RELEASE_CHECKLIST.md") -Force
 
 $qtRoot = Join-Path $ProjectRoot "vendor\qt\6.8.2\msvc2022_64"
 $windeployqt = Join-Path $qtRoot "bin\windeployqt.exe"
@@ -154,7 +167,8 @@ if ($BuildInstaller) {
     if (-not (Test-Path $iscc)) {
         throw "Inno Setup 6 was not found. Install it or omit -BuildInstaller."
     }
-    & $iscc (Join-Path $ProjectRoot "installer\RailShotTV.iss")
+    & $iscc "/DMyAppVersion=$AppVersion" `
+        (Join-Path $ProjectRoot "installer\RailShotTV.iss")
     if ($LASTEXITCODE -ne 0) {
         throw "Installer build failed."
     }

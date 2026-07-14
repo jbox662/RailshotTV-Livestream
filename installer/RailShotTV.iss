@@ -1,5 +1,7 @@
 #define MyAppName "RailShot TV Broadcaster"
+#ifndef MyAppVersion
 #define MyAppVersion "1.0.0"
+#endif
 #define MyAppPublisher "RailShot TV"
 #define MyAppExeName "RailShotBroadcaster.exe"
 
@@ -8,6 +10,10 @@ AppId={{73E927F5-26AC-4C0A-9E78-E9B718C20C6B}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
+VersionInfoVersion={#MyAppVersion}.0
+VersionInfoProductVersion={#MyAppVersion}.0
+VersionInfoCompany={#MyAppPublisher}
+VersionInfoDescription={#MyAppName} Installer
 DefaultDirName={autopf}\RailShot TV
 DefaultGroupName=RailShot TV
 DisableProgramGroupPage=yes

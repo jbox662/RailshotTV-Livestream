@@ -87,6 +87,8 @@ powershell -ExecutionPolicy Bypass -File scripts\package-release.ps1 -BuildInsta
 
 The packaging script runs `windeployqt`, includes the MSVC runtime and media DLLs, validates required FFmpeg runtimes, includes the virtual camera, and writes SHA-256 checksums. Inno Setup 6 is required only for `-BuildInstaller`.
 
+Before publishing, complete [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md). Runtime smoke tests intentionally remain separate from packaging so they can be performed on a clean machine.
+
 ## Project structure
 
 ```text

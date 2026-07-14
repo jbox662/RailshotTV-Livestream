@@ -3,6 +3,10 @@
 #include <QApplication>
 #include <QSurfaceFormat>
 
+#ifndef RAILSHOT_VERSION
+#define RAILSHOT_VERSION "0.0.0"
+#endif
+
 namespace {
 
 // RailShot TV identity — billiards / broadcast.
@@ -476,7 +480,7 @@ int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
     app.setApplicationName("RailShot TV Broadcaster");
     app.setApplicationDisplayName("RailShot TV Broadcaster");
-    app.setApplicationVersion("1.0.0");
+    app.setApplicationVersion(RAILSHOT_VERSION);
     app.setOrganizationName("RailShot TV");
     app.setOrganizationDomain("railshot.tv");
     app.setDesktopFileName("RailShotTV");
