@@ -29,6 +29,14 @@ struct AppSettingsData {
     HotkeyBindings hotkeys;
     int productionProfile = 0; // ProductionProfile as int
     std::string activeCollectionId;
+
+    // Audio (Phase F2)
+    bool audioMonitoringEnabled = true;
+    std::string monitoringDeviceId; // empty = default render
+    std::string micDeviceId;        // empty = default capture
+    int micVolume = 100;
+    bool micMuted = false;
+    int micSyncDelayMs = 0;
 };
 
 class AppSettings {
@@ -51,6 +59,11 @@ public:
 
     void setDefaultRtmpUrl(const std::string& url);
     void setActiveCollectionId(const std::string& id);
+
+    void setMicVolume(int volume);
+    void setMicMuted(bool muted);
+    void setMicSyncDelayMs(int ms);
+    void setAudioMonitoringEnabled(bool enabled);
 
 private:
     AppSettings();

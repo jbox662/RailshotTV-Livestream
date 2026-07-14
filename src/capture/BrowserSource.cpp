@@ -184,6 +184,7 @@ void BrowserSource::updateConfig(const Source& source) {
 
     // Shutdown source when not visible — pause capture / clear output.
     if (after.shutdownWhenNotVisible && !config_.isVisible) {
+        stopLiveRefresh();
         if (webHost_) {
             webHost_->stopCaptureLoop();
         }
@@ -191,10 +192,23 @@ void BrowserSource::updateConfig(const Source& source) {
         return;
     }
 
+    // Resume after invisible shutdown.
+    if (after.shutdownWhenNotVisible && !wasVisible && config_.isVisible) {
+        applySettingsToHost();
+        if (webHost_ && webHost_->isAvailable()) {
+            if (after.refreshWhenActive) {
+                webHost_->reload();
+            } else if (!after.url.trimmed().isEmpty()) {
+                webHost_->forceNavigate(after.url);
+            }
+        }
+        startLiveRefresh();
+        return;
+    }
+
     const bool browserChanged = settingsKey(before) != settingsKey(after);
     if (!browserChanged) {
-        // Visibility-only or transform-only change.
-        if (after.shutdownWhenNotVisible && config_.isVisible) {
+        if (config_.isVisible) {
             startLiveRefresh();
         }
         return;
@@ -204,7 +218,11 @@ void BrowserSource::updateConfig(const Source& source) {
     applyCapturedImage(placeholderImage(
         after.width, after.height, QStringLiteral("Updating… %1").arg(after.url.toHtmlEscaped())));
     applySettingsToHost();
-    syncNavigation();
+    if (webHost_ && !after.url.trimmed().isEmpty()) {
+        webHost_->forceNavigate(after.url);
+    } else {
+        syncNavigation();
+    }
     startLiveRefresh();
 }
 
@@ -277,13 +295,18 @@ void BrowserSource::startLiveRefresh() {
         return;
     }
 
-    // Continuous frames (custom FPS when enabled).
+    // Continuous frames (custom FPS when enabled, else canvas FPS).
     webHost_->startCaptureLoop(browserSettings.captureIntervalMs(), [this](QImage image) {
         if (!image.isNull()) {
             applyCapturedImage(image);
         }
         captureInFlight_ = false;
     });
+
+    // Re-apply CSS periodically so SPA routes keep transparent backgrounds.
+    if (webHost_ && !browserSettings.customCss.trimmed().isEmpty()) {
+        webHost_->setCustomCss(browserSettings.customCss);
+    }
 
     if (liveTimer_) {
         return;

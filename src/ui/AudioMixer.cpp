@@ -1,5 +1,6 @@
 #include "ui/AudioMixer.h"
 
+#include "core/AppSettings.h"
 #include "core/AudioMixer.h"
 #include "ui/DockPanel.h"
 
@@ -9,6 +10,7 @@
 #include <QLabel>
 #include <QProgressBar>
 #include <QSlider>
+#include <QSpinBox>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -37,7 +39,7 @@ AudioMixerWidget::AudioMixerWidget(StreamController* controller, QWidget* parent
 }
 
 QWidget* AudioMixerWidget::makeChannelStrip(const std::string& id, const std::string& name,
-                                            int volume, bool muted) {
+                                            int volume, bool muted, int syncDelayMs) {
     auto* strip = new QFrame(this);
     strip->setObjectName("rsMixerStrip");
     strip->setMinimumWidth(120);
@@ -65,6 +67,16 @@ QWidget* AudioMixerWidget::makeChannelStrip(const std::string& id, const std::st
     slider->setValue(volume);
     stripLayout->addWidget(slider);
 
+    auto* delayRow = new QHBoxLayout();
+    delayRow->addWidget(new QLabel(QStringLiteral("Sync"), strip));
+    auto* delaySpin = new QSpinBox(strip);
+    delaySpin->setRange(0, 2000);
+    delaySpin->setSuffix(QStringLiteral(" ms"));
+    delaySpin->setValue(std::clamp(syncDelayMs, 0, 2000));
+    delaySpin->setToolTip(QStringLiteral("Audio sync offset (delay into the mix)"));
+    delayRow->addWidget(delaySpin, 1);
+    stripLayout->addLayout(delayRow);
+
     auto* bottomRow = new QHBoxLayout();
     bottomRow->setSpacing(4);
     auto* mute = new QCheckBox(QStringLiteral("Mute"), strip);
@@ -77,10 +89,12 @@ QWidget* AudioMixerWidget::makeChannelStrip(const std::string& id, const std::st
     stripLayout->addStretch();
 
     const QString key = QString::fromStdString(id);
-    controls_[key] = {slider, meter, mute, id, 0.0f};
+    controls_[key] = {slider, meter, mute, delaySpin, id, 0.0f};
 
     connect(slider, &QSlider::valueChanged, this, &AudioMixerWidget::onVolumeChanged);
     connect(mute, &QCheckBox::toggled, this, &AudioMixerWidget::onMuteToggled);
+    connect(delaySpin, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            &AudioMixerWidget::onDelayChanged);
 
     return strip;
 }
@@ -101,12 +115,15 @@ void AudioMixerWidget::rebuild() {
         return;
     }
 
-    channelsLayout_->addWidget(makeChannelStrip("__mic__", "Mic/Aux", 100, false));
+    const AppSettingsData settings = AppSettings::instance().data();
+    channelsLayout_->addWidget(makeChannelStrip("__mic__", "Mic/Aux", settings.micVolume,
+                                                settings.micMuted, settings.micSyncDelayMs));
 
     for (const auto& src : scene->sources) {
         if (src.type == SourceType::MediaFile || src.type == SourceType::AudioDevice
             || src.type == SourceType::DesktopAudio) {
-            channelsLayout_->addWidget(makeChannelStrip(src.id, src.name, src.volume, src.muted));
+            channelsLayout_->addWidget(
+                makeChannelStrip(src.id, src.name, src.volume, src.muted, src.syncDelayMs));
         }
     }
     channelsLayout_->addStretch();
@@ -120,7 +137,6 @@ void AudioMixerWidget::onMeterTick() {
         if (found != peaks.end()) {
             target = found->second;
         }
-        // Visual decay for hold/falloff.
         it->displayLevel = std::max(target, it->displayLevel * 0.88f);
         if (it->meter) {
             it->meter->setValue(static_cast<int>(std::clamp(it->displayLevel * 100.0f, 0.0f, 100.0f)));
@@ -139,6 +155,7 @@ void AudioMixerWidget::onVolumeChanged(int value) {
             continue;
         }
         if (it->sourceId == "__mic__") {
+            AppSettings::instance().setMicVolume(value);
             return;
         }
         if (Source* src = SceneManager::instance().sourceById(it->sourceId)) {
@@ -159,10 +176,31 @@ void AudioMixerWidget::onMuteToggled(bool checked) {
             continue;
         }
         if (it->sourceId == "__mic__") {
+            AppSettings::instance().setMicMuted(checked);
             return;
         }
         if (Source* src = SceneManager::instance().sourceById(it->sourceId)) {
             src->muted = checked;
+        }
+        break;
+    }
+}
+
+void AudioMixerWidget::onDelayChanged(int value) {
+    auto* spin = qobject_cast<QSpinBox*>(sender());
+    if (!spin) {
+        return;
+    }
+    for (auto it = controls_.begin(); it != controls_.end(); ++it) {
+        if (it->delaySpin != spin) {
+            continue;
+        }
+        if (it->sourceId == "__mic__") {
+            AppSettings::instance().setMicSyncDelayMs(value);
+            return;
+        }
+        if (Source* src = SceneManager::instance().sourceById(it->sourceId)) {
+            src->syncDelayMs = value;
         }
         break;
     }

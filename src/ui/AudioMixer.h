@@ -9,9 +9,8 @@
 #include <QHBoxLayout>
 #include <QProgressBar>
 #include <QSlider>
+#include <QSpinBox>
 #include <QTimer>
-
-#include <unordered_map>
 
 namespace railshot {
 
@@ -26,6 +25,7 @@ public:
 private slots:
     void onVolumeChanged(int value);
     void onMuteToggled(bool checked);
+    void onDelayChanged(int value);
     void onMeterTick();
 
 private:
@@ -33,12 +33,13 @@ private:
         QSlider* slider = nullptr;
         QProgressBar* meter = nullptr;
         QCheckBox* mute = nullptr;
+        QSpinBox* delaySpin = nullptr;
         std::string sourceId;
         float displayLevel = 0.0f;
     };
 
     QWidget* makeChannelStrip(const std::string& id, const std::string& name, int volume,
-                              bool muted);
+                              bool muted, int syncDelayMs);
 
     StreamController* controller_ = nullptr;
     QHBoxLayout* channelsLayout_ = nullptr;

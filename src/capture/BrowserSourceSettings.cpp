@@ -1,5 +1,7 @@
 #include "capture/BrowserSourceSettings.h"
 
+#include "core/AppSettings.h"
+
 #include <QJsonDocument>
 #include <QJsonObject>
 
@@ -106,7 +108,7 @@ SourceTransform BrowserSourceSettings::defaultSceneTransform() const {
 }
 
 int BrowserSourceSettings::captureIntervalMs() const {
-    const int rate = fpsCustom ? fps : kDefaultFps;
+    const int rate = fpsCustom ? fps : AppSettings::instance().fps();
     return std::max(16, 1000 / std::max(1, rate));
 }
 

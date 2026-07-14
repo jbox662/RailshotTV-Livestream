@@ -74,6 +74,7 @@ set(SOURCES
     src/capture/VideoDeviceSource.cpp
     src/capture/ImageSource.cpp
     src/capture/MediaSource.cpp
+    src/capture/MediaSourceSettings.cpp
     src/capture/NdiFinder.cpp
     src/capture/NdiSource.cpp
     src/capture/BrowserSource.cpp
@@ -83,10 +84,12 @@ set(SOURCES
     src/capture/ColorSource.cpp
     src/capture/TextSource.cpp
     src/capture/DesktopAudioSource.cpp
+    src/capture/AudioDeviceSource.cpp
     src/capture/DxgiMonitorCapture.cpp
     src/capture/DisplayCaptureSource.cpp
     src/capture/WindowBitbltCapture.cpp
     src/capture/WindowCaptureSource.cpp
+    src/capture/WasapiAudioMonitor.cpp
     src/score/ScoreManager.cpp
     src/score/ScoreboardStyle.cpp
     src/score/ScoreboardRenderer.cpp
@@ -102,6 +105,7 @@ set(SOURCES
     src/output/virtualcam/tiny-nv12-scale.c
     src/ui/BrowserSourceConfigDialog.cpp
     src/ui/ColorSourceConfigDialog.cpp
+    src/ui/MediaSourceConfigDialog.cpp
     src/ui/TextSourceConfigDialog.cpp
     src/ui/AddSourceDialog.cpp
     src/ui/SettingsDialog.cpp

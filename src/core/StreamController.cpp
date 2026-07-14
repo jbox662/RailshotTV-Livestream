@@ -28,7 +28,8 @@ StreamController::StreamController()
     , encoder_(std::make_unique<FFmpegEncoder>())
     , rtmpOutput_(std::make_unique<RtmpOutput>())
     , fileRecorder_(std::make_unique<FileRecorder>())
-    , virtualCam_(std::make_unique<VirtualCamOutput>()) {
+    , virtualCam_(std::make_unique<VirtualCamOutput>())
+    , audioMonitor_(std::make_unique<WasapiAudioMonitor>()) {
     SceneManager::instance().setOnScenesChanged([this]() { onSceneCollectionChanged(); });
 }
 
@@ -128,6 +129,27 @@ void StreamController::applyVideoSettings() {
         return;
     }
     restartPreviewEngine();
+}
+
+void StreamController::applyAudioSettings() {
+    sourceRegistry_.restartMicCapture();
+    syncAudioMonitor();
+}
+
+void StreamController::syncAudioMonitor() {
+    if (!audioMonitor_) {
+        return;
+    }
+    const AppSettingsData settings = AppSettings::instance().data();
+    audioMonitor_->close();
+    audioMonitor_->setEnabled(settings.audioMonitoringEnabled);
+    if (!settings.audioMonitoringEnabled) {
+        return;
+    }
+    if (!audioMonitor_->open(settings.monitoringDeviceId)) {
+        Logger::warn("StreamController: audio monitoring device unavailable");
+        audioMonitor_->setEnabled(false);
+    }
 }
 
 bool StreamController::startVirtualCamera() {
@@ -415,6 +437,7 @@ bool StreamController::startStream() {
 }
 
 void StreamController::ensureMeterThread() {
+    syncAudioMonitor();
     if (audioThread_) {
         return;
     }
@@ -432,6 +455,9 @@ void StreamController::stopMeterThread() {
     }
     audioThread_.reset();
     audioStopRequested_ = false;
+    if (audioMonitor_) {
+        audioMonitor_->close();
+    }
 }
 
 void StreamController::audioThreadFunc() {
@@ -440,6 +466,9 @@ void StreamController::audioThreadFunc() {
 
     while (!audioStopRequested_.load()) {
         if (auto mixed = AudioMixer::mixActiveScene(sourceRegistry_)) {
+            if (audioMonitor_ && audioMonitor_->isEnabled()) {
+                audioMonitor_->write(*mixed);
+            }
             if (streaming_.load()) {
                 rawAudioQueue_.push(std::move(*mixed));
             }

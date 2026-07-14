@@ -1,6 +1,7 @@
 #pragma once
 
 #include "capture/DirectShowCapture.h"
+#include "capture/WasapiAudioMonitor.h"
 #include "core/AudioMixer.h"
 #include "core/FrameData.h"
 #include "core/GLCompositor.h"
@@ -70,6 +71,7 @@ public:
     void ensurePreviewEngine();
     void stopPreviewEngine();
     void applyVideoSettings(); // restart preview compositor when not streaming
+    void applyAudioSettings(); // re-open mic/monitor after Settings change
 
     [[nodiscard]] bool isStreaming() const { return streaming_.load(); }
     [[nodiscard]] bool isRecording() const { return recording_.load(); }
@@ -86,12 +88,14 @@ private:
     void stopMeterThread();
     void audioThreadFunc();
     void packetDispatchThreadFunc();
+    void syncAudioMonitor();
 
     std::unique_ptr<GLCompositor> compositor_;
     std::unique_ptr<FFmpegEncoder> encoder_;
     std::unique_ptr<RtmpOutput> rtmpOutput_;
     std::unique_ptr<FileRecorder> fileRecorder_;
     std::unique_ptr<VirtualCamOutput> virtualCam_;
+    std::unique_ptr<WasapiAudioMonitor> audioMonitor_;
     SourceRegistry sourceRegistry_;
 
     ThreadSafeQueue<VideoFrame> compositedVideoQueue_;

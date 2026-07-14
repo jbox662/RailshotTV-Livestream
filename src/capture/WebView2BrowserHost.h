@@ -32,6 +32,7 @@ public:
     void resizeView(int width, int height);
     void setCustomCss(const QString& css);
     void navigate(const QString& url);
+    void forceNavigate(const QString& url);
     void reload();
     void capture(std::function<void(QImage)> callback);
     void startCaptureLoop(int intervalMs, std::function<void(QImage)> callback);

@@ -47,6 +47,9 @@ QVector<SourceOption> allOptions() {
         {QStringLiteral("desktop_audio"), QStringLiteral("Desktop Audio"),
          QStringLiteral("System playback via WASAPI loopback"),
          QStringLiteral("Audio"), QStringLiteral("Desktop Audio")},
+        {QStringLiteral("audio_input"), QStringLiteral("Audio Input Capture"),
+         QStringLiteral("Microphone or line-in via WASAPI"),
+         QStringLiteral("Audio"), QStringLiteral("Audio Input Capture")},
         {QStringLiteral("ndi"), QStringLiteral("NDI Source"),
          QStringLiteral("Network video from an NDI sender"),
          QStringLiteral("Network"), QStringLiteral("NDI Source")},
@@ -133,7 +136,7 @@ QIcon makeSourceIcon(const QString& id, const QColor& accent) {
             p.setPen(Qt::NoPen);
             p.drawPolygon(play);
         }
-    } else if (id == QLatin1String("desktop_audio")) {
+    } else if (id == QLatin1String("desktop_audio") || id == QLatin1String("audio_input")) {
         p.drawRoundedRect(QRectF(14, 14, 12, 16), 2, 2);
         p.drawArc(QRectF(26, 16, 10, 14), -60 * 16, 120 * 16);
         p.drawArc(QRectF(30, 13, 10, 20), -50 * 16, 100 * 16);

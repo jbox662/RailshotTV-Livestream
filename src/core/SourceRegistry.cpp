@@ -1,5 +1,6 @@
 #include "core/SourceRegistry.h"
 
+#include "core/AppSettings.h"
 #include "core/Logger.h"
 #include "output/IsoRecorder.h"
 
@@ -22,7 +23,7 @@ std::unique_ptr<ISourceProvider> SourceRegistry::createProvider(const Source& so
     case SourceType::MediaFile:
         return std::make_unique<MediaSource>(source);
     case SourceType::AudioDevice:
-        return std::make_unique<MediaSource>(source);
+        return std::make_unique<AudioDeviceSource>(source);
     case SourceType::NDI:
         return std::make_unique<NdiSource>(source);
     case SourceType::Browser:
@@ -48,9 +49,11 @@ bool SourceRegistry::canReuseProvider(const ISourceProvider& provider, const Sou
     if (current.id != source.id || current.type != source.type) {
         return false;
     }
-    // Live overlays can update in place.
+    // Live overlays / media / audio can update in place (visibility, speed, device id).
     if (source.type == SourceType::Browser || source.type == SourceType::Scoreboard
-        || source.type == SourceType::Text || source.type == SourceType::Color) {
+        || source.type == SourceType::Text || source.type == SourceType::Color
+        || source.type == SourceType::MediaFile || source.type == SourceType::AudioDevice
+        || source.type == SourceType::DesktopAudio) {
         return true;
     }
     return current.pathOrDeviceId == source.pathOrDeviceId;
@@ -149,7 +152,8 @@ bool SourceRegistry::startMicCapture() {
         return true;
     }
     micCapture_ = std::make_unique<WasapiAudioCapture>();
-    if (!micCapture_->openDefaultMicrophone()) {
+    const std::string deviceId = AppSettings::instance().data().micDeviceId;
+    if (!micCapture_->openMicrophone(deviceId)) {
         micCapture_.reset();
         return false;
     }
@@ -172,6 +176,11 @@ void SourceRegistry::stopMicCapture() {
     micQueue_.shutdown();
     micCapture_.reset();
     micRunning_ = false;
+}
+
+bool SourceRegistry::restartMicCapture() {
+    stopMicCapture();
+    return startMicCapture();
 }
 
 std::optional<AudioFrame> SourceRegistry::latestMicFrame() {

@@ -1,5 +1,7 @@
 #include "core/AudioMixer.h"
 
+#include "core/AppSettings.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -8,13 +10,14 @@ namespace railshot {
 
 std::mutex AudioMixer::peakMutex_;
 std::unordered_map<std::string, float> AudioMixer::peaks_;
+std::mutex AudioMixer::delayMutex_;
+std::unordered_map<std::string, std::deque<int16_t>> AudioMixer::delayBuffers_;
 
 float AudioMixer::volumeToGain(int volumePercent) {
     const int clamped = std::clamp(volumePercent, 0, 100);
     if (clamped == 0) {
         return 0.0f;
     }
-    // Map 0-100 to roughly -60 dB .. 0 dB (logarithmic)
     const float db = -60.0f + (static_cast<float>(clamped) / 100.0f) * 60.0f;
     return std::pow(10.0f, db / 20.0f);
 }
@@ -49,7 +52,6 @@ float AudioMixer::peakLevel(const AudioFrame& frame) {
 void AudioMixer::storePeak(const std::string& id, float peak) {
     std::lock_guard lock(peakMutex_);
     auto& existing = peaks_[id];
-    // Fast attack, slower visual hold is handled in the UI.
     existing = std::max(existing * 0.85f, peak);
 }
 
@@ -70,6 +72,46 @@ std::unordered_map<std::string, float> AudioMixer::snapshotPeaks() {
     return peaks_;
 }
 
+AudioFrame AudioMixer::applySyncDelay(const std::string& id, AudioFrame frame, int delayMs) {
+    const int delay = std::clamp(delayMs, 0, 2000);
+    if (delay <= 0 || !frame.isValid()) {
+        std::lock_guard lock(delayMutex_);
+        delayBuffers_.erase(id);
+        return frame;
+    }
+
+    const int channels = std::max(1, frame.channels);
+    const int rate = std::max(1, frame.sampleRate);
+    const size_t delaySamples = static_cast<size_t>(delay) * static_cast<size_t>(rate)
+                                * static_cast<size_t>(channels) / 1000;
+
+    auto* samples = reinterpret_cast<int16_t*>(frame.data.data());
+    const size_t count = frame.data.size() / sizeof(int16_t);
+
+    std::lock_guard lock(delayMutex_);
+    auto& buffer = delayBuffers_[id];
+    for (size_t i = 0; i < count; ++i) {
+        buffer.push_back(samples[i]);
+    }
+
+    // Cap buffer growth (delay + ~100ms).
+    const size_t maxSize = delaySamples + static_cast<size_t>(rate) * channels / 10;
+    while (buffer.size() > maxSize) {
+        buffer.pop_front();
+    }
+
+    if (buffer.size() <= delaySamples) {
+        std::fill(frame.data.begin(), frame.data.end(), 0);
+        return frame;
+    }
+
+    for (size_t i = 0; i < count; ++i) {
+        samples[i] = buffer.front();
+        buffer.pop_front();
+    }
+    return frame;
+}
+
 std::optional<AudioFrame> AudioMixer::mixActiveScene(SourceRegistry& registry) {
     auto& sceneManager = SceneManager::instance();
     const Scene* scene = sceneManager.activeScene();
@@ -77,15 +119,25 @@ std::optional<AudioFrame> AudioMixer::mixActiveScene(SourceRegistry& registry) {
         return std::nullopt;
     }
 
+    const AppSettingsData settings = AppSettings::instance().data();
     std::vector<AudioFrame> tracks;
     std::unordered_map<std::string, float> touched;
 
     if (auto mic = registry.latestMicFrame()) {
         AudioFrame micFrame = *mic;
-        applyGain(micFrame, volumeToGain(100));
-        storePeak("__mic__", peakLevel(micFrame));
-        touched["__mic__"] = 1.0f;
-        tracks.push_back(std::move(micFrame));
+        if (!settings.micMuted) {
+            Source micSource;
+            micSource.id = "__mic__";
+            micSource.filters = {}; // global mic uses settings-only for now
+            applyGain(micFrame, volumeToGain(settings.micVolume));
+            micFrame = applySyncDelay("__mic__", std::move(micFrame), settings.micSyncDelayMs);
+            storePeak("__mic__", peakLevel(micFrame));
+            touched["__mic__"] = 1.0f;
+            tracks.push_back(std::move(micFrame));
+        } else {
+            storePeak("__mic__", 0.0f);
+            touched["__mic__"] = 1.0f;
+        }
     } else {
         storePeak("__mic__", 0.0f);
         touched["__mic__"] = 1.0f;
@@ -110,7 +162,9 @@ std::optional<AudioFrame> AudioMixer::mixActiveScene(SourceRegistry& registry) {
             continue;
         }
         AudioFrame frame = *audio;
+        applyAudioFilters(src, frame);
         applyGain(frame, volumeToGain(src.volume));
+        frame = applySyncDelay(src.id, std::move(frame), src.syncDelayMs);
         storePeak(src.id, peakLevel(frame));
         touched[src.id] = 1.0f;
         tracks.push_back(std::move(frame));

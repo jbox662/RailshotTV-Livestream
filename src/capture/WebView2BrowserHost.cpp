@@ -443,12 +443,26 @@ void WebView2BrowserHost::navigate(const QString& url) {
 void WebView2BrowserHost::reload() {
 #ifdef RAILSHOT_HAS_WEBVIEW2
     if (!ready_ || !webView_) {
+        if (!currentUrl_.isEmpty()) {
+            lastNavigatedUrl_.clear();
+            navigate(currentUrl_);
+        }
         return;
     }
     navigationPending_ = true;
     pageReady_ = false;
     lastNavigatedUrl_.clear();
     static_cast<ICoreWebView2*>(webView_)->Reload();
+#endif
+}
+
+void WebView2BrowserHost::forceNavigate(const QString& url) {
+#ifdef RAILSHOT_HAS_WEBVIEW2
+    lastNavigatedUrl_.clear();
+    pageReady_ = false;
+    navigate(url);
+#else
+    Q_UNUSED(url);
 #endif
 }
 
@@ -494,8 +508,11 @@ void WebView2BrowserHost::startCaptureLoop(int intervalMs,
             capture(loopCaptureCallback_);
         });
     }
-    captureTimer_->setInterval(std::max(33, intervalMs));
+    captureTimer_->setInterval(std::max(16, intervalMs));
     if (!captureTimer_->isActive()) {
+        captureTimer_->start();
+    } else {
+        // Restart so the new interval applies immediately.
         captureTimer_->start();
     }
 }

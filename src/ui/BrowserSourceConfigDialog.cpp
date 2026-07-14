@@ -117,16 +117,36 @@ void BrowserSourceConfigDialog::buildUi() {
     fpsRow->addStretch(1);
     form->addLayout(fpsRow);
 
-    form->addWidget(new QLabel(QStringLiteral("Custom CSS"), formHost));
+    auto* fpsHint = new QLabel(
+        QStringLiteral("When custom FPS is off, the browser capture rate follows Settings → Canvas FPS."),
+        formHost);
+    fpsHint->setWordWrap(true);
+    fpsHint->setObjectName(QStringLiteral("rsMutedHint"));
+    form->addWidget(fpsHint);
+
+    auto* cssHeader = new QHBoxLayout();
+    cssHeader->addWidget(new QLabel(QStringLiteral("Custom CSS"), formHost));
+    cssHeader->addStretch(1);
+    auto* resetCssBtn = new QPushButton(QStringLiteral("Transparent default"), formHost);
+    resetCssBtn->setToolTip(
+        QStringLiteral("Reset CSS so the page body is transparent (typical for Scoreholio overlays)."));
+    cssHeader->addWidget(resetCssBtn);
+    form->addLayout(cssHeader);
     cssEdit_ = new QPlainTextEdit(formHost);
     cssEdit_->setMinimumHeight(90);
+    cssEdit_->setPlaceholderText(
+        QStringLiteral("body { background-color: rgba(0, 0, 0, 0); margin: 0px auto; overflow: hidden; }"));
     form->addWidget(cssEdit_);
 
     shutdownCheck_ = new QCheckBox(QStringLiteral("Shutdown source when not visible"), formHost);
+    shutdownCheck_->setToolTip(
+        QStringLiteral("Stops WebView2 capture while this source is hidden to reduce CPU/GPU use."));
     form->addWidget(shutdownCheck_);
 
     refreshActiveCheck_ =
         new QCheckBox(QStringLiteral("Refresh browser when scene becomes active"), formHost);
+    refreshActiveCheck_->setToolTip(
+        QStringLiteral("Reloads the page when the source becomes visible again (after shutdown or scene switch)."));
     form->addWidget(refreshActiveCheck_);
 
     auto* permRow = new QHBoxLayout();
@@ -191,6 +211,10 @@ void BrowserSourceConfigDialog::buildUi() {
             [this](int) { emitLiveUpdate(); });
     connect(browseBtn_, &QPushButton::clicked, this, &BrowserSourceConfigDialog::onBrowseLocalFile);
     connect(refreshCacheBtn_, &QPushButton::clicked, this, &BrowserSourceConfigDialog::onRefreshCache);
+    connect(resetCssBtn, &QPushButton::clicked, this, [this]() {
+        cssEdit_->setPlainText(QString::fromUtf8(BrowserSourceSettings::kDefaultCss));
+        emitLiveUpdate();
+    });
 }
 
 void BrowserSourceConfigDialog::updateDependentVisibility() {

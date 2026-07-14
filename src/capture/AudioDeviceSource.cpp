@@ -1,23 +1,23 @@
-#include "capture/DesktopAudioSource.h"
+#include "capture/AudioDeviceSource.h"
 
 #include "core/Logger.h"
 
 namespace railshot {
 
-DesktopAudioSource::DesktopAudioSource(Source config)
+AudioDeviceSource::AudioDeviceSource(Source config)
     : config_(std::move(config))
     , capture_(std::make_unique<WasapiAudioCapture>()) {}
 
-DesktopAudioSource::~DesktopAudioSource() {
+AudioDeviceSource::~AudioDeviceSource() {
     stop();
 }
 
-bool DesktopAudioSource::start() {
+bool AudioDeviceSource::start() {
     if (running_.load()) {
         return true;
     }
-    if (!capture_->openDesktopLoopback(config_.pathOrDeviceId)) {
-        Logger::error("DesktopAudioSource: failed to open loopback for " + config_.name);
+    if (!capture_->openMicrophone(config_.pathOrDeviceId)) {
+        Logger::error("AudioDeviceSource: failed to open device for " + config_.name);
         return false;
     }
     queue_.reset();
@@ -28,7 +28,7 @@ bool DesktopAudioSource::start() {
     return true;
 }
 
-void DesktopAudioSource::stop() {
+void AudioDeviceSource::stop() {
     if (!running_.load()) {
         return;
     }
@@ -38,11 +38,11 @@ void DesktopAudioSource::stop() {
     running_ = false;
 }
 
-bool DesktopAudioSource::isRunning() const {
+bool AudioDeviceSource::isRunning() const {
     return running_.load();
 }
 
-void DesktopAudioSource::updateConfig(const Source& source) {
+void AudioDeviceSource::updateConfig(const Source& source) {
     const std::string oldId = config_.pathOrDeviceId;
     config_ = source;
     if (!running_.load()) {
@@ -54,17 +54,17 @@ void DesktopAudioSource::updateConfig(const Source& source) {
     capture_->stop();
     queue_.shutdown();
     queue_.reset();
-    if (!capture_->openDesktopLoopback(config_.pathOrDeviceId) || !capture_->start(&queue_)) {
-        Logger::error("DesktopAudioSource: failed to reopen " + config_.name);
+    if (!capture_->openMicrophone(config_.pathOrDeviceId) || !capture_->start(&queue_)) {
+        Logger::error("AudioDeviceSource: failed to reopen " + config_.name);
         running_ = false;
     }
 }
 
-std::optional<VideoFrame> DesktopAudioSource::latestVideoFrame() {
+std::optional<VideoFrame> AudioDeviceSource::latestVideoFrame() {
     return std::nullopt;
 }
 
-std::optional<AudioFrame> DesktopAudioSource::latestAudioFrame() {
+std::optional<AudioFrame> AudioDeviceSource::latestAudioFrame() {
     std::optional<AudioFrame> latest;
     while (auto frame = queue_.pop(0)) {
         latest = std::move(*frame);

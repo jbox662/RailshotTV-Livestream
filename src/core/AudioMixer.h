@@ -4,6 +4,7 @@
 #include "core/SourceRegistry.h"
 #include "core/models/SceneManager.h"
 
+#include <deque>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -27,9 +28,13 @@ private:
     static float peakLevel(const AudioFrame& frame);
     static void storePeak(const std::string& id, float peak);
     static void decayUnusedPeaks(const std::unordered_map<std::string, float>& touched);
+    static AudioFrame applySyncDelay(const std::string& id, AudioFrame frame, int delayMs);
 
     static std::mutex peakMutex_;
     static std::unordered_map<std::string, float> peaks_;
+
+    static std::mutex delayMutex_;
+    static std::unordered_map<std::string, std::deque<int16_t>> delayBuffers_;
 };
 
 } // namespace railshot

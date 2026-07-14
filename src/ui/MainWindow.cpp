@@ -8,6 +8,7 @@
 #include "ui/BrowserSourceConfigDialog.h"
 #include "ui/ColorSourceConfigDialog.h"
 #include "ui/FiltersDialog.h"
+#include "ui/MediaSourceConfigDialog.h"
 #include "ui/ScoreboardConfigDialog.h"
 #include "ui/SettingsDialog.h"
 #include "ui/TextSourceConfigDialog.h"
@@ -17,9 +18,12 @@
 #include "capture/BrowserSource.h"
 #include "capture/BrowserSourceSettings.h"
 #include "capture/ColorSource.h"
+#include "capture/MediaSource.h"
+#include "capture/MediaSourceSettings.h"
 #include "capture/DxgiMonitorCapture.h"
 #include "capture/ScoreboardSource.h"
 #include "capture/TextSource.h"
+#include "capture/WasapiAudioCapture.h"
 #include "capture/WindowBitbltCapture.h"
 #include "core/AppSettings.h"
 #include "core/ProductionProfile.h"
@@ -982,6 +986,9 @@ void MainWindow::onAddSource() {
     } else if (choice == "desktop_audio") {
         src.type = SourceType::DesktopAudio;
         src.transform = {0, 0, 1, 1};
+    } else if (choice == "audio_input") {
+        src.type = SourceType::AudioDevice;
+        src.transform = {0, 0, 1, 1};
     } else if (choice == "ndi") {
         src.type = SourceType::NDI;
         const auto ndiSources = NdiFinder::discoverSources();
@@ -1025,7 +1032,8 @@ void MainWindow::onAddSource() {
 
     if (choice != "browser" && choice != "scoreboard" && choice != "text"
         && choice != "color" && choice != "display_capture"
-        && choice != "window_capture" && choice != "desktop_audio") {
+        && choice != "window_capture" && choice != "desktop_audio"
+        && choice != "audio_input") {
         src.transform = centeredSourceTransform(960.0f, 540.0f);
     }
 
@@ -1087,11 +1095,38 @@ void MainWindow::onConfigureSource() {
         if (!path.isEmpty()) {
             src->pathOrDeviceId = path.toStdString();
         }
-    } else if (src->type == SourceType::MediaFile || src->type == SourceType::AudioDevice) {
-        const QString path = QFileDialog::getOpenFileName(
-            this, "Select Media", {}, "Media (*.mp4 *.mp3 *.wav *.mkv)");
-        if (!path.isEmpty()) {
-            src->pathOrDeviceId = path.toStdString();
+    } else if (src->type == SourceType::MediaFile) {
+        MediaSourceConfigDialog dlg(*src, this);
+        connect(&dlg, &MediaSourceConfigDialog::settingsChanged, this,
+                [src](const MediaSourceSettings& settings) {
+                    settings.applyToSource(*src);
+                    MediaSource::applyLiveConfig(*src);
+                });
+        if (dlg.exec() != QDialog::Accepted) {
+            return;
+        }
+        dlg.applyToSource(*src);
+        MediaSource::applyLiveConfig(*src);
+    } else if (src->type == SourceType::AudioDevice) {
+        const auto devices = WasapiAudioCapture::enumerateInputDevices();
+        QStringList names;
+        for (const auto& d : devices) {
+            names << QString::fromStdString(d.name);
+        }
+        if (names.isEmpty()) {
+            names << QStringLiteral("Default input");
+        }
+        bool ok = false;
+        const QString choice = QInputDialog::getItem(this, QStringLiteral("Audio Input"),
+                                                     QStringLiteral("Device:"), names, 0, false, &ok);
+        if (ok && !devices.empty()) {
+            const int idx = names.indexOf(choice);
+            if (idx >= 0) {
+                src->pathOrDeviceId = devices[static_cast<size_t>(idx)].id;
+                src->name = devices[static_cast<size_t>(idx)].name;
+            }
+        } else if (ok) {
+            src->pathOrDeviceId.clear();
         }
     } else if (src->type == SourceType::VideoDevice) {
         const auto devices = StreamController::enumerateVideoDevices();
@@ -1258,10 +1293,27 @@ void MainWindow::onConfigureSource() {
         }
         dlg.applyToSource(*src);
     } else if (src->type == SourceType::DesktopAudio) {
-        QMessageBox::information(this, "Desktop Audio",
-                                 "Captures system audio from the default playback device "
-                                 "(WASAPI loopback). Use the Audio Mixer to adjust volume.");
-        return;
+        const auto devices = WasapiAudioCapture::enumerateOutputDevices();
+        QStringList names;
+        for (const auto& d : devices) {
+            names << QString::fromStdString(d.name);
+        }
+        if (names.isEmpty()) {
+            names << QStringLiteral("Default output (loopback)");
+        }
+        bool ok = false;
+        const QString choice = QInputDialog::getItem(
+            this, QStringLiteral("Desktop Audio"), QStringLiteral("Playback device to capture:"),
+            names, 0, false, &ok);
+        if (ok && !devices.empty()) {
+            const int idx = names.indexOf(choice);
+            if (idx >= 0) {
+                src->pathOrDeviceId = devices[static_cast<size_t>(idx)].id;
+                src->name = "Desktop Audio (" + devices[static_cast<size_t>(idx)].name + ")";
+            }
+        } else if (ok) {
+            src->pathOrDeviceId.clear();
+        }
     }
 
     controller_->onSceneCollectionChanged();
@@ -1310,7 +1362,14 @@ void MainWindow::onOpenSettings() {
         keep.hotkeys = settings.hotkeys;
         keep.productionProfile = settings.productionProfile;
         keep.activeCollectionId = settings.activeCollectionId;
+        keep.audioMonitoringEnabled = settings.audioMonitoringEnabled;
+        keep.monitoringDeviceId = settings.monitoringDeviceId;
+        keep.micDeviceId = settings.micDeviceId;
+        keep.micVolume = settings.micVolume;
+        keep.micMuted = settings.micMuted;
+        keep.micSyncDelayMs = settings.micSyncDelayMs;
         AppSettings::instance().setData(keep);
+        controller_->applyAudioSettings();
         rtmpUrlEdit_->setText(QString::fromStdString(keep.defaultRtmpUrl));
         bindHotkeys();
         refreshCollectionsCombo();
@@ -1319,6 +1378,7 @@ void MainWindow::onOpenSettings() {
     AppSettings::instance().setData(settings);
     rtmpUrlEdit_->setText(QString::fromStdString(settings.defaultRtmpUrl));
     bindHotkeys();
+    controller_->applyAudioSettings();
     if (dlg.videoSettingsChanged()) {
         controller_->applyVideoSettings();
     }

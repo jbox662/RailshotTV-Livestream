@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/FrameData.h"
+
 #include <string>
 #include <vector>
 
@@ -29,14 +31,18 @@ enum class TransitionType {
 
 enum class FilterType {
     Opacity,
-    ColorCorrection
+    ColorCorrection,
+    Gain,
+    Compressor,
+    NoiseGate,
+    NoiseSuppress
 };
 
 struct SourceFilter {
     std::string id;
     FilterType type = FilterType::Opacity;
     bool enabled = true;
-    // Opacity: {"opacity":0..1}  ColorCorrection: {"brightness":-1..1,"contrast":0..2,"saturation":0..2}
+    // Opacity / ColorCorrection / Gain / Compressor / NoiseGate / NoiseSuppress JSON
     std::string paramsJson;
 };
 
@@ -66,6 +72,7 @@ struct Source {
 
     int volume = 100;
     bool muted = false;
+    int syncDelayMs = 0; // OBS-like audio sync offset (ms), delayed into the mix
     bool loop = true;
     bool isoRecording = false;
 
@@ -101,5 +108,8 @@ struct FilterRenderParams {
 };
 
 FilterRenderParams resolveFilters(const Source& source);
+
+// Apply enabled audio filters in order onto an S16 PCM frame (in place).
+void applyAudioFilters(const Source& source, AudioFrame& frame);
 
 } // namespace railshot

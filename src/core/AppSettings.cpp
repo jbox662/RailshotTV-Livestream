@@ -87,10 +87,19 @@ void AppSettings::load() {
     if (obj.value(QStringLiteral("hotkeys")).isObject()) {
         data_.hotkeys = hotkeysFromJson(obj.value(QStringLiteral("hotkeys")).toObject());
     }
+    data_.audioMonitoringEnabled = obj.value(QStringLiteral("audioMonitoringEnabled")).toBool(true);
+    data_.monitoringDeviceId =
+        obj.value(QStringLiteral("monitoringDeviceId")).toString().toStdString();
+    data_.micDeviceId = obj.value(QStringLiteral("micDeviceId")).toString().toStdString();
+    data_.micVolume = obj.value(QStringLiteral("micVolume")).toInt(100);
+    data_.micMuted = obj.value(QStringLiteral("micMuted")).toBool(false);
+    data_.micSyncDelayMs = obj.value(QStringLiteral("micSyncDelayMs")).toInt(0);
 
     data_.canvasWidth = std::clamp(data_.canvasWidth, 320, 7680);
     data_.canvasHeight = std::clamp(data_.canvasHeight, 240, 4320);
     data_.fps = std::clamp(data_.fps, 15, 60);
+    data_.micVolume = std::clamp(data_.micVolume, 0, 100);
+    data_.micSyncDelayMs = std::clamp(data_.micSyncDelayMs, 0, 2000);
 }
 
 bool AppSettings::save() const {
@@ -103,6 +112,12 @@ bool AppSettings::save() const {
     obj[QStringLiteral("productionProfile")] = data_.productionProfile;
     obj[QStringLiteral("activeCollectionId")] = QString::fromStdString(data_.activeCollectionId);
     obj[QStringLiteral("hotkeys")] = hotkeysToJson(data_.hotkeys);
+    obj[QStringLiteral("audioMonitoringEnabled")] = data_.audioMonitoringEnabled;
+    obj[QStringLiteral("monitoringDeviceId")] = QString::fromStdString(data_.monitoringDeviceId);
+    obj[QStringLiteral("micDeviceId")] = QString::fromStdString(data_.micDeviceId);
+    obj[QStringLiteral("micVolume")] = data_.micVolume;
+    obj[QStringLiteral("micMuted")] = data_.micMuted;
+    obj[QStringLiteral("micSyncDelayMs")] = data_.micSyncDelayMs;
 
     const QByteArray bytes = QJsonDocument(obj).toJson(QJsonDocument::Indented);
     std::ofstream out(savePath_, std::ios::binary | std::ios::trunc);
@@ -126,6 +141,8 @@ void AppSettings::setData(const AppSettingsData& data) {
         data_.canvasWidth = std::clamp(data_.canvasWidth, 320, 7680);
         data_.canvasHeight = std::clamp(data_.canvasHeight, 240, 4320);
         data_.fps = std::clamp(data_.fps, 15, 60);
+        data_.micVolume = std::clamp(data_.micVolume, 0, 100);
+        data_.micSyncDelayMs = std::clamp(data_.micSyncDelayMs, 0, 2000);
     }
     save();
 }
@@ -177,6 +194,38 @@ void AppSettings::setActiveCollectionId(const std::string& id) {
     {
         std::lock_guard lock(mutex_);
         data_.activeCollectionId = id;
+    }
+    save();
+}
+
+void AppSettings::setMicVolume(int volume) {
+    {
+        std::lock_guard lock(mutex_);
+        data_.micVolume = std::clamp(volume, 0, 100);
+    }
+    save();
+}
+
+void AppSettings::setMicMuted(bool muted) {
+    {
+        std::lock_guard lock(mutex_);
+        data_.micMuted = muted;
+    }
+    save();
+}
+
+void AppSettings::setMicSyncDelayMs(int ms) {
+    {
+        std::lock_guard lock(mutex_);
+        data_.micSyncDelayMs = std::clamp(ms, 0, 2000);
+    }
+    save();
+}
+
+void AppSettings::setAudioMonitoringEnabled(bool enabled) {
+    {
+        std::lock_guard lock(mutex_);
+        data_.audioMonitoringEnabled = enabled;
     }
     save();
 }

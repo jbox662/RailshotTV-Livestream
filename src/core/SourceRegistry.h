@@ -1,6 +1,7 @@
 #pragma once
 
 #include "capture/ISourceProvider.h"
+#include "capture/AudioDeviceSource.h"
 #include "capture/BrowserSource.h"
 #include "capture/ColorSource.h"
 #include "capture/DesktopAudioSource.h"
@@ -38,6 +39,7 @@ public:
 
     bool startMicCapture();
     void stopMicCapture();
+    bool restartMicCapture();
     [[nodiscard]] std::optional<AudioFrame> latestMicFrame();
 
 private:

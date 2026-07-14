@@ -1,7 +1,10 @@
 #include "ui/SettingsDialog.h"
 
+#include "capture/WasapiAudioCapture.h"
 #include "core/models/SceneManager.h"
 
+#include <QCheckBox>
+#include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QKeySequenceEdit>
@@ -27,6 +30,24 @@ QString seqToString(QKeySequenceEdit* edit) {
     return edit->keySequence().toString(QKeySequence::PortableText);
 }
 
+void fillDeviceCombo(QComboBox* combo, const std::vector<AudioDeviceInfo>& devices,
+                     const std::string& selectedId) {
+    combo->clear();
+    combo->addItem(QStringLiteral("Default"), QString());
+    int select = 0;
+    for (const auto& d : devices) {
+        QString label = QString::fromStdString(d.name);
+        if (d.isDefault) {
+            label += QStringLiteral(" (Default)");
+        }
+        combo->addItem(label, QString::fromStdString(d.id));
+        if (!selectedId.empty() && d.id == selectedId) {
+            select = combo->count() - 1;
+        }
+    }
+    combo->setCurrentIndex(select);
+}
+
 } // namespace
 
 SettingsDialog::SettingsDialog(QWidget* parent)
@@ -34,8 +55,8 @@ SettingsDialog::SettingsDialog(QWidget* parent)
     , original_(AppSettings::instance().data())
     , draft_(original_) {
     setWindowTitle(QStringLiteral("Settings"));
-    setMinimumSize(500, 480);
-    resize(540, 520);
+    setMinimumSize(520, 520);
+    resize(560, 560);
     setObjectName(QStringLiteral("rsSettingsDialog"));
 
     auto* root = new QVBoxLayout(this);
@@ -68,6 +89,29 @@ SettingsDialog::SettingsDialog(QWidget* parent)
     videoHint->setObjectName(QStringLiteral("rsFieldLabel"));
     videoForm->addRow(videoHint);
     tabs->addTab(videoPage, QStringLiteral("Video"));
+
+    auto* audioPage = new QWidget(tabs);
+    auto* audioForm = new QFormLayout(audioPage);
+    monitorEnableCheck_ = new QCheckBox(QStringLiteral("Monitor program mix (hear audio locally)"),
+                                        audioPage);
+    audioForm->addRow(monitorEnableCheck_);
+    monitorDeviceCombo_ = new QComboBox(audioPage);
+    micDeviceCombo_ = new QComboBox(audioPage);
+    fillDeviceCombo(monitorDeviceCombo_, WasapiAudioCapture::enumerateOutputDevices(),
+                    original_.monitoringDeviceId);
+    fillDeviceCombo(micDeviceCombo_, WasapiAudioCapture::enumerateInputDevices(),
+                    original_.micDeviceId);
+    audioForm->addRow(QStringLiteral("Monitoring device"), monitorDeviceCombo_);
+    audioForm->addRow(QStringLiteral("Mic/Aux device"), micDeviceCombo_);
+    auto* audioHint = new QLabel(
+        QStringLiteral("Monitoring plays the mixed program audio on speakers/headphones "
+                       "(like OBS audio monitoring). Mic/Aux feeds the global mic strip.\n"
+                       "Application (process) audio capture is Phase F4."),
+        audioPage);
+    audioHint->setWordWrap(true);
+    audioHint->setObjectName(QStringLiteral("rsFieldLabel"));
+    audioForm->addRow(audioHint);
+    tabs->addTab(audioPage, QStringLiteral("Audio"));
 
     auto* streamPage = new QWidget(tabs);
     auto* streamForm = new QFormLayout(streamPage);
@@ -131,6 +175,7 @@ void SettingsDialog::loadUi() {
     rtmpEdit_->setText(QString::fromStdString(original_.defaultRtmpUrl));
     collectionNameEdit_->setText(
         QString::fromStdString(SceneManager::instance().collection().name));
+    monitorEnableCheck_->setChecked(original_.audioMonitoringEnabled);
 }
 
 AppSettingsData SettingsDialog::collectDraft() const {
@@ -140,6 +185,9 @@ AppSettingsData SettingsDialog::collectDraft() const {
     draft.fps = fpsSpin_->value();
     draft.defaultRtmpUrl = rtmpEdit_->text().trimmed().toStdString();
     draft.activeCollectionId = SceneManager::instance().currentCollectionId();
+    draft.audioMonitoringEnabled = monitorEnableCheck_->isChecked();
+    draft.monitoringDeviceId = monitorDeviceCombo_->currentData().toString().toStdString();
+    draft.micDeviceId = micDeviceCombo_->currentData().toString().toStdString();
     draft.hotkeys.transition = seqToString(hkTransition_).toStdString();
     draft.hotkeys.startStopStream = seqToString(hkStream_).toStdString();
     draft.hotkeys.record = seqToString(hkRecord_).toStdString();

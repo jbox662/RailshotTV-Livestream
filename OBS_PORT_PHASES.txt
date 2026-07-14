@@ -1,55 +1,58 @@
-# OBS → RailShot port phases
+# OBS → RailShot stock Windows parity
 #
-# Strategy: use obs-studio/ as REFERENCE for behavior, reimplement in RailShot
-# (Qt/C++). Do NOT fork/link libobs. UI is RailShot-branded (felt green + amber),
-# not an OBS lookalike.
+# Goal: RailShot does what stock OBS Studio can do on Windows.
+# Strategy: obs-studio/ is the behavior checklist. Reimplement in Qt/C++.
+# Do NOT link libobs. No OBS branding — RailShot UI throughout.
+# Third-party OBS plugins are out of scope.
 #
-# Phase A — Broadcast core (in progress / stabilize)
-#   - Browser source (WebView2) parity with Scoreholio overlays
-#   - Scene / source / transform / studio mode / stream / record
+# ============================================================================
+# Already shipped (MVP depth — deepen under F1–F8 as needed)
+# ============================================================================
+# - Scenes / collections / studio mode / stream / record / virtual camera
+# - Sources: VideoDevice, Display, Window (BitBlt), Image, Media, Text, Color,
+#   Browser (WebView2), DesktopAudio, NDI stub, Scoreboard (RailShot-unique)
+# - Filters: Opacity + Color Correction
+# - Transitions: Cut, Fade, Slide, Fade to Black
+# - Hotkeys, HTTP :8080 + thin WS :4455 (not full obs-websocket)
+# - RailShot-unique: Scoreboard, Venue Mode, Sports/Billiards profile
 #
-# Phase B — Sources people expect from OBS (Windows) — MVP DONE
-#   [done] Display Capture (DXGI Desktop Duplication)
-#   [done] Window Capture (BitBlt)
-#   [done] Text (QPainter raster)
-#   [done] Color Source
-#   [done] Desktop Audio (WASAPI loopback)
-#   [deferred] Game Capture (DLL injection / graphics hooks)
+# ============================================================================
+# Parity backlog (execute in order)
+# ============================================================================
 #
-# Phase C — Production tools — MVP DONE
-#   [done] Real audio peak meters (PCM levels + mixer decay)
-#   [done] Settings window (Video / Stream; Hotkeys placeholder)
-#   [done] Transitions: Cut, Fade, Slide, Fade to Black
-#   [done] Filters framework: Opacity + Color Correction
-#   [deferred] Audio monitoring / deeper encoder settings / full filter catalog
+# Phase F1 — Browser + Media harden — DONE
+#   [x] WebView2: correct size/FPS, transparency, reload, scene lifecycle
+#   [x] Browser properties: CSS, refresh, shutdown when inactive
+#   [x] Media source: transport + restart-on-show (OBS-like)
 #
-# Phase D — Power user — MVP DONE
-#   [done] Hotkeys (Settings Hotkeys tab + QShortcuts)
-#   [done] Local HTTP remote API (scenes / stream / record / transition / score)
-#   [done] Thin WebSocket remote on port 4455 (shared RemoteCommandBus)
-#   [done] Production profile + scene collection name persistence
-#   [done] Virtual Camera (DShow filter DLL) — Phase D.1
-#   [done] Multi scene collections + stronger remote — Phase E
-#   [deferred] Full obs-websocket protocol parity
+# Phase F2 — Audio parity — DONE
+#   [x] Audio monitoring (hear the mix)
+#   [x] Per-source sync delay
+#   [x] Device / desktop audio completeness (app/process audio → F4)
+#   [x] Audio filters: gain, compressor, noise suppression/gate
 #
-# Phase D.1 — Virtual Camera — MVP DONE
-#   [done] Shared-memory NV12 queue (RailShotVirtualCamVideo)
-#   [done] VirtualCamOutput + GLCompositor / StreamController / Controls Start-Stop
-#   [done] railshot-virtualcam64.dll DirectShow source ("RailShot Virtual Camera")
-#   [done] scripts/install-virtualcam.bat / uninstall-virtualcam.bat (admin regsvr32)
-#   [deferred] 32-bit filter / virtual mic / dynamic res while clients connected
+# Phase F3 — Video filter catalog — NEXT
+#   [ ] Crop, chroma/color key, mask, LUT/color grade
+#   [ ] Scale, scroll, sharpness, render delay
 #
-# Phase E — Multi collections + stronger remote — MVP DONE
-#   [done] Multi scene collections (index + per-file JSON, migrate scenes.json)
-#   [done] Scenes dock: New / Rename / Duplicate / Delete / switch collections
-#   [done] RemoteCommandBus: studio preview/program, collections, getVersion (protocol 2)
-#   [done] HTTP routes + phone remote collection/studio/preview UI
-#   [deferred] Game Capture (DLL injection / graphics hooks)
-#   [deferred] Full obs-websocket protocol parity
-#   [deferred] Audio monitoring / deeper encoder settings / full filter catalog
-
-# RailShot-unique (keep / expand — competitive advantages)
-#   - Scoreboard overlay + dock
-#   - Venue Mode
-#   - Sports / Billiards production profile
-#   - Local web remote (phone control)
+# Phase F4 — Capture parity
+#   [ ] Game Capture (graphics hooks)
+#   [ ] Window Capture via WGC
+#   [ ] Application Audio Capture
+#
+# Phase F5 — Output / encoder
+#   [ ] NVENC / QSV / x264 settings UI
+#   [ ] Recording formats / quality
+#   [ ] Replay buffer + remux
+#   [ ] Stream service presets (rtmp-services)
+#
+# Phase F6 — Transitions catalog
+#   [ ] Wipe / stinger / luma / swipe (OBS transition set)
+#
+# Phase F7 — Remote protocol
+#   [ ] obs-websocket compatible protocol (auth + events + common requests)
+#
+# Phase F8 — Ship
+#   [ ] Installer + windeployqt + virt-cam register + docs
+#   [ ] Final RailShot UI pass (not OBS chrome)
+#

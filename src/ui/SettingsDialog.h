@@ -10,6 +10,8 @@ class QSpinBox;
 class QLineEdit;
 class QKeySequenceEdit;
 class QTabWidget;
+class QComboBox;
+class QCheckBox;
 
 namespace railshot {
 
@@ -35,6 +37,10 @@ private:
     QSpinBox* fpsSpin_ = nullptr;
     QLineEdit* rtmpEdit_ = nullptr;
     QLineEdit* collectionNameEdit_ = nullptr;
+
+    QCheckBox* monitorEnableCheck_ = nullptr;
+    QComboBox* monitorDeviceCombo_ = nullptr;
+    QComboBox* micDeviceCombo_ = nullptr;
 
     QKeySequenceEdit* hkTransition_ = nullptr;
     QKeySequenceEdit* hkStream_ = nullptr;

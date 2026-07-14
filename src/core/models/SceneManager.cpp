@@ -96,12 +96,29 @@ TransitionType transitionTypeFromString(const QString& s) {
 }
 
 QString filterTypeToString(FilterType type) {
-    return type == FilterType::ColorCorrection ? QStringLiteral("ColorCorrection")
-                                               : QStringLiteral("Opacity");
+    switch (type) {
+    case FilterType::ColorCorrection:
+        return QStringLiteral("ColorCorrection");
+    case FilterType::Gain:
+        return QStringLiteral("Gain");
+    case FilterType::Compressor:
+        return QStringLiteral("Compressor");
+    case FilterType::NoiseGate:
+        return QStringLiteral("NoiseGate");
+    case FilterType::NoiseSuppress:
+        return QStringLiteral("NoiseSuppress");
+    case FilterType::Opacity:
+    default:
+        return QStringLiteral("Opacity");
+    }
 }
 
 FilterType filterTypeFromString(const QString& s) {
     if (s == "ColorCorrection") return FilterType::ColorCorrection;
+    if (s == "Gain") return FilterType::Gain;
+    if (s == "Compressor") return FilterType::Compressor;
+    if (s == "NoiseGate") return FilterType::NoiseGate;
+    if (s == "NoiseSuppress") return FilterType::NoiseSuppress;
     return FilterType::Opacity;
 }
 
@@ -135,6 +152,7 @@ QJsonObject sourceToJson(const Source& src) {
     obj["pathOrDeviceId"] = QString::fromStdString(src.pathOrDeviceId);
     obj["volume"] = src.volume;
     obj["muted"] = src.muted;
+    obj["syncDelayMs"] = src.syncDelayMs;
     obj["loop"] = src.loop;
     obj["isoRecording"] = src.isoRecording;
     obj["overlaySettings"] = QString::fromStdString(src.overlaySettings);
@@ -158,6 +176,7 @@ Source sourceFromJson(const QJsonObject& obj) {
     src.pathOrDeviceId = obj.value("pathOrDeviceId").toString().toStdString();
     src.volume = obj.value("volume").toInt(100);
     src.muted = obj.value("muted").toBool(false);
+    src.syncDelayMs = std::clamp(obj.value("syncDelayMs").toInt(0), 0, 2000);
     src.loop = obj.value("loop").toBool(true);
     src.isoRecording = obj.value("isoRecording").toBool(false);
     src.overlaySettings = obj.value("overlaySettings").toString().toStdString();
